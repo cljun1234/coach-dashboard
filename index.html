@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Coach Dashboard</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root { --bg:var(--tg-theme-secondary-bg-color,#f4f5f7); --card:var(--tg-theme-bg-color,#fff); --text:var(--tg-theme-text-color,#111827);
+          --muted:var(--tg-theme-hint-color,#6b7280); --line:rgba(127,127,127,.18); --accent:var(--tg-theme-button-color,#2563eb);
+          --good:#16a34a; --warn:#f59e0b; --bad:#ef4444; --p:#16a34a; --c:#f59e0b; --f:#a855f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg:var(--tg-theme-secondary-bg-color,#0f1115); --card:var(--tg-theme-bg-color,#1a1d24);
+          --text:var(--tg-theme-text-color,#f3f4f6); --muted:var(--tg-theme-hint-color,#9ca3af); } }
+  #status { padding:40px 24px; text-align:center; color:var(--muted); font-size:15px; }
+  #status button { margin-top:14px; border:0; padding:10px 18px; border-radius:10px; background:var(--accent); color:#fff; font-weight:600; font-size:14px; }
+  #app { display:none; }
+  header { display:flex; justify-content:space-between; align-items:flex-start; }
+  #refresh { border:0; background:var(--card); color:var(--text); width:38px; height:38px; border-radius:50%; font-size:18px; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:18px 16px 8px; }
+  header h1 { margin:0; font-size:22px; }
+  header .sub { color:var(--muted); font-size:13px; margin-top:2px; }
+  nav { display:flex; gap:6px; padding:8px 16px; position:sticky; top:0; background:var(--bg); z-index:2; }
+  nav button { flex:1; border:0; padding:10px 0; border-radius:10px; background:var(--card); color:var(--muted); font-weight:600; font-size:14px; }
+  nav button.on { background:var(--accent); color:#fff; }
+  main { padding:4px 16px 32px; }
+  .tab { display:none; } .tab.on { display:block; }
+  .card { background:var(--card); border-radius:14px; padding:14px; margin:10px 0; border:1px solid var(--line); }
+  .card h2 { font-size:14px; margin:0 0 10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+  .big { font-size:30px; font-weight:700; } .big small { font-size:15px; color:var(--muted); font-weight:500; }
+  .bar { height:10px; background:var(--line); border-radius:6px; overflow:hidden; margin:8px 0 4px; }
+  .bar > div { height:100%; border-radius:6px; }
+  .row { display:flex; justify-content:space-between; align-items:center; font-size:14px; padding:6px 0; border-bottom:1px solid var(--line); gap:8px; }
+  .row:last-child { border-bottom:0; }
+  .row .l { color:var(--muted); font-size:12px; min-width:44px; }
+  .row .m { flex:1; } .row .r { font-weight:600; white-space:nowrap; }
+  .macros { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
+  .macro { text-align:center; padding:8px; border-radius:10px; background:var(--bg); }
+  .macro b { display:block; font-size:18px; } .macro span { font-size:12px; color:var(--muted); }
+  .stats { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+  .stat { background:var(--bg); border-radius:10px; padding:10px; }
+  .stat b { font-size:20px; display:block; } .stat span { font-size:12px; color:var(--muted); }
+  .empty { color:var(--muted); font-size:14px; padding:4px 0; }
+  select { width:100%; padding:10px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-size:14px; margin-bottom:8px; }
+  pre { white-space:pre-wrap; font-family:inherit; font-size:14px; line-height:1.5; margin:0; }
+  canvas { max-height:220px; }
+</style></head>
+<body>
+<div id="status">Loading your dashboard…</div>
+<div id="app">
+<header><div><h1 id="hello"></h1><div class="sub" id="sub"></div></div><button id="refresh" title="Refresh">↻</button></header>
+<nav><button class="on" data-t="today">Today</button><button data-t="progress">Progress</button><button data-t="plan">Plan</button></nav>
+<main>
+  <section class="tab on" id="today">
+    <div class="card"><h2>Calories</h2>
+      <div class="big" id="kcal"></div><div class="bar"><div id="kcalbar"></div></div>
+      <div class="sub" id="kcalnote" style="font-size:13px;color:var(--muted)"></div>
+      <div class="macros">
+        <div class="macro"><b id="mp"></b><span>Protein</span><div class="bar"><div id="pbar" style="background:var(--p)"></div></div></div>
+        <div class="macro"><b id="mc"></b><span>Carbs</span></div>
+        <div class="macro"><b id="mf"></b><span>Fat</span></div>
+      </div></div>
+    <div class="card"><h2>Meals today</h2><div id="meals"></div></div>
+    <div class="card"><h2>Training today</h2><div id="workouts"></div></div>
+    <div class="card"><h2>Coach check-ins</h2><div id="checkins"></div></div>
+  </section>
+  <section class="tab" id="progress">
+    <div class="card"><h2>Last 7 days</h2><div class="stats">
+      <div class="stat"><b id="sTrain"></b><span>training days</span></div>
+      <div class="stat"><b id="sStreak"></b><span>day logging streak</span></div>
+      <div class="stat"><b id="sKcal"></b><span>avg kcal (logged days)</span></div>
+      <div class="stat"><b id="sProt"></b><span>avg protein</span></div></div></div>
+    <div class="card"><h2>Body weight</h2><div id="wNote" class="empty"></div><canvas id="cWeight"></canvas></div>
+    <div class="card"><h2>Calories · 14 days</h2><canvas id="cKcal"></canvas></div>
+    <div class="card"><h2>Protein · 14 days</h2><canvas id="cProt"></canvas></div>
+    <div class="card"><h2>Training volume · 14 days</h2><canvas id="cVol"></canvas></div>
+    <div class="card"><h2>Lift progress</h2><select id="exSel"></select><div id="exNote" class="empty"></div><canvas id="cEx"></canvas></div>
+  </section>
+  <section class="tab" id="plan">
+    <div class="card"><h2>🏋️ Workout plan</h2><pre id="wplan"></pre></div>
+    <div class="card"><h2>🍽 Food plan</h2><pre id="fplan"></pre></div>
+  </section>
+</main>
+</div>
+<script>
+const tg = window.Telegram && Telegram.WebApp;
+try { tg.ready(); tg.expand(); tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } catch (e) {}
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const lbl = d => d.slice(8,10) + '/' + d.slice(5,7);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === b.dataset.t));
+  window.scrollTo(0, 0);
+});
+
+
+function render(D) {
+// ---- header
+$('hello').textContent = (D.name ? 'Hey ' + D.name : 'Your dashboard') + ' 💪';
+$('sub').textContent = D.now + (D.goal ? ' · Goal: ' + D.goal : '');
+
+// ---- today
+const T = D.today, tk = D.targets.kcal, tp = D.targets.protein;
+$('kcal').innerHTML = T.kcal + (tk ? ' <small>/ ' + tk + ' kcal</small>' : ' <small>kcal</small>');
+const kp = tk ? Math.min(100, T.kcal / tk * 100) : 0;
+$('kcalbar').style.width = kp + '%';
+$('kcalbar').style.background = !tk ? css('--accent') : T.kcal > tk * 1.05 ? css('--bad') : T.kcal > tk * 0.9 ? css('--warn') : css('--good');
+$('kcalnote').textContent = tk ? (T.kcal <= tk ? (tk - T.kcal) + ' kcal left' : (T.kcal - tk) + ' kcal over') : 'Set a calorie target with your coach';
+$('mp').textContent = T.protein + 'g' + (tp ? ' / ' + tp : '');
+$('pbar').style.width = tp ? Math.min(100, T.protein / tp * 100) + '%' : '0';
+$('mc').textContent = T.carbs + 'g'; $('mf').textContent = T.fat + 'g';
+$('meals').innerHTML = T.meals.length ? T.meals.map(m =>
+  '<div class="row"><span class="l">' + esc(m.time) + '</span><span class="m">' + esc(m.desc) + '</span><span class="r">' + m.kcal + ' kcal · P' + m.p + '</span></div>').join('')
+  : '<div class="empty">Nothing logged yet. Send your coach a photo of your next meal 📸</div>';
+$('workouts').innerHTML = T.workouts.length ? T.workouts.map(w =>
+  '<div class="row"><span class="m">' + esc(w.ex) + '</span><span class="r">' +
+  (w.sets ? esc(w.sets) + '×' + esc(w.reps) : '') + (w.kg !== '' && w.kg != null ? ' @ ' + esc(w.kg) + 'kg' : '') + (w.min ? ' ' + esc(w.min) + 'min' : '') + '</span></div>').join('')
+  : '<div class="empty">No training logged today.</div>';
+$('checkins').innerHTML = D.checkins.length ? D.checkins.map(c =>
+  '<div class="row"><span class="l">' + esc(c.at.slice(8, 10) + '/' + c.at.slice(5, 7) + ' ' + c.at.slice(11)) + '</span><span class="m">' + esc(c.reason) + '</span></div>').join('')
+  : '<div class="empty">No check-ins scheduled.</div>';
+
+// ---- progress stats
+$('sTrain').textContent = D.week.trainDays + ' / 7';
+$('sStreak').textContent = D.week.streak + ' 🔥';
+$('sKcal').textContent = D.week.avgKcal || '–';
+$('sProt').textContent = D.week.avgProtein ? D.week.avgProtein + 'g' : '–';
+
+// ---- charts
+if (window.Chart) Object.values(Chart.instances || {}).forEach(c => c.destroy());
+if (window.Chart) {
+  Chart.defaults.color = css('--muted');
+  Chart.defaults.borderColor = css('--line');
+  Chart.defaults.font.family = '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif';
+  const opts = (extra) => Object.assign({ responsive:true, maintainAspectRatio:true, aspectRatio:1.8,
+    plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } }, extra || {});
+  const targetLine = (n, len) => n ? [{ type:'line', data:Array(len).fill(n), borderColor:css('--bad'), borderDash:[6,4], pointRadius:0, borderWidth:1.5 }] : [];
+
+  if (D.weights.length) {
+    const v = D.weights.map(p => p[1]);
+    const ch = (v[v.length-1] - v[0]).toFixed(1);
+    $('wNote').textContent = 'Latest ' + v[v.length-1] + 'kg · ' + (ch > 0 ? '+' : '') + ch + 'kg since ' + lbl(D.weights[0][0]);
+    new Chart($('cWeight'), { type:'line', data:{ labels:D.weights.map(p => lbl(p[0])),
+      datasets:[{ data:v, borderColor:css('--accent'), backgroundColor:'rgba(37,99,235,.12)', fill:true, tension:.3 }] },
+      options: opts({ scales:{ y:{ suggestedMin:Math.min(...v)-1, suggestedMax:Math.max(...v)+1 } } }) });
+  } else { $('wNote').textContent = 'No weigh-ins yet. Tell your coach your weight.'; $('cWeight').style.display = 'none'; }
+
+  const L = D.days14.map(lbl);
+  new Chart($('cKcal'), { data:{ labels:L, datasets:[{ type:'bar', data:D.kcal14, backgroundColor:css('--accent'), borderRadius:4 }].concat(targetLine(tk, L.length)) }, options:opts() });
+  new Chart($('cProt'), { data:{ labels:L, datasets:[{ type:'bar', data:D.protein14, backgroundColor:css('--p'), borderRadius:4 }].concat(targetLine(tp, L.length)) }, options:opts() });
+  new Chart($('cVol'), { type:'bar', data:{ labels:L, datasets:[{ data:D.volume14, backgroundColor:css('--f'), borderRadius:4 }] }, options:opts() });
+
+  let exChart;
+  if (D.exercises.length) {
+    $('exSel').innerHTML = D.exercises.map((e, i) => '<option value="' + i + '">' + esc(e.name) + ' (' + e.points.length + ' sessions)</option>').join('');
+    const drawEx = i => {
+      const e = D.exercises[i], v = e.points.map(p => p[1]);
+      $('exNote').textContent = 'Best ' + Math.max(...v) + 'kg' + (v.length > 1 ? ' · ' + (v[v.length-1] - v[0] >= 0 ? '+' : '') + (v[v.length-1] - v[0]) + 'kg since first session' : '');
+      if (exChart) exChart.destroy();
+      exChart = new Chart($('cEx'), { type:'line', data:{ labels:e.points.map(p => lbl(p[0])),
+        datasets:[{ data:v, borderColor:css('--p'), backgroundColor:css('--p'), tension:.2 }] }, options:opts({ scales:{ y:{ beginAtZero:false } } }) });
+    };
+    $('exSel').onchange = ev => drawEx(+ev.target.value);
+    drawEx(0);
+  } else { $('exSel').style.display = 'none'; $('exNote').textContent = 'Log weighted lifts to see progress here.'; $('cEx').style.display = 'none'; }
+}
+
+// ---- plans
+$('wplan').textContent = D.plans.workout || 'No workout plan yet. Ask your coach to build one.';
+$('fplan').textContent = D.plans.food || 'No food plan yet. Ask your coach to build one.';
+
+}
+
+async function load() {
+  const qs = new URLSearchParams(location.search);
+  const api = qs.get('api');
+  const status = $('status');
+  status.style.display = 'block'; status.textContent = 'Loading your dashboard…';
+  if (!api) { status.textContent = 'Missing api parameter. Open this from your Telegram bot.'; return; }
+  const auth = tg && tg.initData ? 'initData=' + encodeURIComponent(tg.initData)
+             : qs.get('key') ? 'key=' + encodeURIComponent(qs.get('key')) : '';
+  if (!auth) { status.textContent = 'Open this dashboard from your Telegram bot 📊'; return; }
+  try {
+    const res = await fetch(api + (api.includes('?') ? '&' : '?') + 'page=data&' + auth);
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error || 'Unknown error');
+    render(j.data);
+    status.style.display = 'none'; $('app').style.display = 'block';
+  } catch (err) {
+    status.innerHTML = '⚠️ Could not load: ' + esc(err.message) + '<br><button onclick="load()">Try again</button>';
+  }
+}
+$('refresh').onclick = () => { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} load(); };
+load();
+</script>
+</body></html>
