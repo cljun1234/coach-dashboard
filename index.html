@@ -44,12 +44,45 @@
   select { width:100%; padding:10px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-size:14px; margin-bottom:8px; }
   pre { white-space:pre-wrap; font-family:inherit; font-size:14px; line-height:1.5; margin:0; }
   canvas { max-height:220px; }
+  nav button { font-size:13px; }
+  .hint { color:var(--muted); font-size:12px; margin:4px 0 0; line-height:1.4; }
+  .seg { display:flex; background:var(--bg); border-radius:10px; padding:3px; gap:3px; }
+  .seg button { flex:1; border:0; background:transparent; color:var(--muted); padding:8px 4px; border-radius:8px; font-size:13px; font-weight:600; }
+  .seg button.on { background:var(--accent); color:#fff; }
+  .field { margin:12px 0 0; } .field > label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; font-weight:600; }
+  input[type=text], input[type=number], input[type=time], input[type=date], textarea, .sheet select {
+    width:100%; padding:10px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); font-size:14px; font-family:inherit; }
+  textarea { min-height:90px; resize:vertical; line-height:1.45; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .btn { border:0; border-radius:10px; padding:10px 14px; font-weight:600; font-size:14px; background:var(--accent); color:#fff; }
+  .btn.ghost { background:var(--bg); color:var(--text); } .btn.danger { background:transparent; color:var(--bad); border:1px solid var(--bad); }
+  .btn.small { padding:6px 10px; font-size:13px; } .btn.full { width:100%; margin-top:12px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .chip { border:1px dashed var(--line); background:transparent; color:var(--text); border-radius:20px; padding:6px 10px; font-size:12px; }
+  .item { display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--line); }
+  .item:last-child { border-bottom:0; } .item .grow { flex:1; min-width:0; }
+  .item .t { font-weight:600; font-size:14px; } .item .s { color:var(--muted); font-size:12px; margin-top:2px; word-wrap:break-word; }
+  .icon { border:0; background:var(--bg); color:var(--text); width:32px; height:32px; border-radius:8px; font-size:14px; flex:none; }
+  .switch { position:relative; width:44px; height:26px; flex:none; } .switch input { display:none; }
+  .switch span { position:absolute; inset:0; background:var(--line); border-radius:13px; transition:.2s; }
+  .switch span:before { content:''; position:absolute; width:20px; height:20px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+  .switch input:checked + span { background:var(--good); } .switch input:checked + span:before { transform:translateX(18px); }
+  .rowx { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .modedesc { font-size:13px; color:var(--muted); margin-top:8px; }
+  #sheetBg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; z-index:10; }
+  .sheet { position:fixed; left:0; right:0; bottom:0; background:var(--card); border-radius:18px 18px 0 0; padding:16px 16px 24px; z-index:11;
+           max-height:85vh; overflow:auto; transform:translateY(105%); transition:transform .2s, visibility .2s; visibility:hidden; }
+  .sheet.on { transform:none; visibility:visible; } .sheet h3 { margin:0 0 4px; font-size:17px; }
+  #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#111827; color:#fff; padding:10px 16px; border-radius:20px;
+           font-size:14px; opacity:0; transition:opacity .2s; z-index:20; pointer-events:none; max-width:90%; text-align:center; }
+  #toast.on { opacity:.95; }
+  .kv { display:grid; grid-template-columns:minmax(90px,35%) 1fr; gap:6px 10px; }
 </style></head>
 <body>
 <div id="status">Loading your dashboard…</div>
 <div id="app">
 <header><div><h1 id="hello"></h1><div class="sub" id="sub"></div></div><button id="refresh" title="Refresh">↻</button></header>
-<nav><button class="on" data-t="today">Today</button><button data-t="progress">Progress</button><button data-t="plan">Plan</button></nav>
+<nav><button class="on" data-t="today">Today</button><button data-t="progress">Progress</button><button data-t="coach">Coach</button><button data-t="memory">Memory</button></nav>
 <main>
   <section class="tab on" id="today">
     <div class="card"><h2>Calories</h2>
@@ -76,12 +109,48 @@
     <div class="card"><h2>Training volume · 14 days</h2><canvas id="cVol"></canvas></div>
     <div class="card"><h2>Lift progress</h2><select id="exSel"></select><div id="exNote" class="empty"></div><canvas id="cEx"></canvas></div>
   </section>
-  <section class="tab" id="plan">
-    <div class="card"><h2>🏋️ Workout plan</h2><pre id="wplan"></pre></div>
-    <div class="card"><h2>🍽 Food plan</h2><pre id="fplan"></pre></div>
+  <section class="tab" id="coach">
+    <div class="card"><h2>Coach mode</h2>
+      <div class="seg" id="modeSeg"><button data-v="active">💪 Active</button><button data-v="light">🌿 Light</button><button data-v="paused">⏸ Paused</button></div>
+      <div class="modedesc" id="modeDesc"></div></div>
+    <div class="card"><h2>Preferences</h2>
+      <div class="field"><label>Reply length</label>
+        <div class="seg" id="lenSeg"><button data-v="short">Short</button><button data-v="normal">Normal</button><button data-v="detailed">Detailed</button></div></div>
+      <div class="field"><label>Coaching style</label><input type="text" id="pStyle" list="styles" placeholder="e.g. tough love">
+        <datalist id="styles"><option>tough love</option><option>chill</option><option>cheerleader</option><option>drill sergeant</option><option>friendly but honest</option></datalist></div>
+      <div class="field"><label>Quiet hours (no AI check-ins)</label><div class="two"><input type="time" id="pQs"><input type="time" id="pQe"></div></div>
+      <div class="field rowx"><div><b style="font-size:14px">Smart check-ins</b><p class="hint">Coach plans extra check-ins each morning around your plan (pre-workout, meal nudges).</p></div>
+        <label class="switch"><input type="checkbox" id="pSmart"><span></span></label></div>
+      <div class="field"><label>Daily targets</label><div class="two"><input type="number" id="pKcal" placeholder="kcal"><input type="number" id="pProt" placeholder="protein g"></div></div>
+      <button class="btn full" id="savePrefs">Save preferences</button></div>
+    <div class="card"><h2>Routines</h2><p class="hint" style="margin-top:-4px">Fixed check-ins your coach always runs. Reviews include charts.</p>
+      <div id="routines"></div>
+      <div class="chips"><button class="chip" data-preset="interval">＋ Every 4 hours</button><button class="chip" data-preset="morning">＋ Morning check-in</button>
+        <button class="chip" data-preset="daily">＋ Daily review</button><button class="chip" data-preset="weekly">＋ Weekly review</button><button class="chip" data-preset="custom">＋ Custom</button></div></div>
+    <div class="card"><h2>Upcoming check-ins</h2><div id="checkinsList"></div></div>
+  </section>
+  <section class="tab" id="memory">
+    <div class="card"><h2>About you</h2><p class="hint" style="margin-top:-4px">What your coach remembers about you.</p><div id="about"></div>
+      <button class="btn ghost small" style="margin-top:10px" id="addAbout">＋ Add fact</button></div>
+    <div class="card"><h2>Notes & memories</h2><div id="notes"></div>
+      <button class="btn ghost small" style="margin-top:10px" id="addNote">＋ Add note</button></div>
+    <div class="card"><h2>🏋️ Workout plan</h2><textarea id="wplanEd" placeholder="No workout plan yet. Ask your coach to build one, or write it here."></textarea>
+      <button class="btn small" style="margin-top:8px" data-plan="workout">Save workout plan</button></div>
+    <div class="card"><h2>🍽 Food plan</h2><textarea id="fplanEd" placeholder="No food plan yet."></textarea>
+      <button class="btn small" style="margin-top:8px" data-plan="food">Save food plan</button></div>
+    <div class="card"><h2>Logs</h2>
+      <div class="seg" id="logSeg"><button data-v="meal" class="on">Meals</button><button data-v="workout">Workouts</button><button data-v="weight">Weight</button></div>
+      <div id="logs" style="margin-top:6px"></div></div>
+    <div class="card"><h2>Chat history</h2><p class="hint" style="margin-top:-4px" id="chatInfo"></p>
+      <button class="btn danger full" id="clearChat">Clear chat history</button>
+      <p class="hint">Only clears the conversation context. Profile, plans and logs are kept.</p></div>
   </section>
 </main>
 </div>
+<div id="sheetBg"></div>
+<div class="sheet" id="sheet"><h3 id="sheetTitle"></h3><div id="sheetBody"></div>
+  <div class="two" style="margin-top:16px"><button class="btn ghost" id="sheetCancel">Cancel</button><button class="btn" id="sheetSave">Save</button></div></div>
+<div id="toast"></div>
 <script>
 const tg = window.Telegram && Telegram.WebApp;
 try { tg.ready(); tg.expand(); tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } catch (e) {}
@@ -168,17 +237,14 @@ if (window.Chart) {
   } else { $('exSel').style.display = 'none'; $('exNote').textContent = 'Log weighted lifts to see progress here.'; $('cEx').style.display = 'none'; }
 }
 
-// ---- plans
-$('wplan').textContent = D.plans.workout || 'No workout plan yet. Ask your coach to build one.';
-$('fplan').textContent = D.plans.food || 'No food plan yet. Ask your coach to build one.';
 
 }
 
-async function load() {
+async function load(quiet) {
   const qs = new URLSearchParams(location.search);
   const api = qs.get('api');
   const status = $('status');
-  status.style.display = 'block'; status.textContent = 'Loading your dashboard…';
+  if (!quiet) { status.style.display = 'block'; status.textContent = 'Loading your dashboard…'; }
   if (!api) { status.textContent = 'Missing api parameter. Open this from your Telegram bot.'; return; }
   const auth = tg && tg.initData ? 'initData=' + encodeURIComponent(tg.initData)
              : qs.get('key') ? 'key=' + encodeURIComponent(qs.get('key')) : '';
@@ -193,7 +259,175 @@ async function load() {
     status.innerHTML = '⚠️ Could not load: ' + esc(err.message) + '<br><button onclick="load()">Try again</button>';
   }
 }
-$('refresh').onclick = () => { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} load(); };
+// =================== Settings (Coach + Memory tabs) ===================
+let S = null, logKind = 'meal', logShown = 15;
+const AUTH = () => {
+  const qs = new URLSearchParams(location.search);
+  return tg && tg.initData ? { initData: tg.initData } : { key: qs.get('key') || '' };
+};
+const API = () => new URLSearchParams(location.search).get('api');
+const toast = (m) => { const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 1800); };
+const haptic = (k) => { try { tg.HapticFeedback.notificationOccurred(k || 'success'); } catch (e) {} };
+const confirmBox = (msg) => new Promise(res => { try { if (tg && tg.showConfirm && tg.platform !== 'unknown') return tg.showConfirm(msg, ok => res(ok)); } catch (e) {} res(window.confirm(msg)); });
+
+async function api(action, args, okMsg) {
+  try {
+    const res = await fetch(API() + (API().includes('?') ? '&' : '?') + 'page=api', {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ auth: AUTH(), action, args: args || {} }) });
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error || 'Failed');
+    S = j.data; renderSettings();
+    if (okMsg) { toast(okMsg); haptic(); }
+    if (action !== 'get') dashStale = true;
+    return true;
+  } catch (err) { toast('⚠️ ' + err.message); haptic('error'); return false; }
+}
+
+// ---- bottom-sheet form ----
+let sheetSave = null;
+function openForm(title, fields, onSave) {
+  $('sheetTitle').textContent = title;
+  $('sheetBody').innerHTML = fields.map(f => {
+    const v = f.value == null ? '' : f.value, id = 'f_' + f.k;
+    let input;
+    if (f.type === 'textarea') input = '<textarea id="' + id + '">' + esc(v) + '</textarea>';
+    else if (f.type === 'select') input = '<select id="' + id + '">' + f.options.map(o => '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(v) ? ' selected' : '') + '>' + esc(o[1]) + '</option>').join('') + '</select>';
+    else input = '<input type="' + (f.type || 'text') + '" id="' + id + '" value="' + esc(v) + '"' + (f.step ? ' step="' + f.step + '"' : '') + '>';
+    return '<div class="field" data-k="' + f.k + '"' + (f.show ? ' data-show="1"' : '') + '><label>' + esc(f.label) + '</label>' + input + (f.hint ? '<p class="hint">' + esc(f.hint) + '</p>' : '') + '</div>';
+  }).join('');
+  sheetSave = () => { const out = {}; fields.forEach(f => { const el = $('f_' + f.k); out[f.k] = el ? el.value : ''; }); return onSave(out); };
+  fields.forEach(f => { if (f.onchange) { $('f_' + f.k).onchange = f.onchange; f.onchange(); } });
+  $('sheetBg').style.display = 'block'; requestAnimationFrame(() => $('sheet').classList.add('on'));
+}
+function closeForm() { $('sheet').classList.remove('on'); setTimeout(() => $('sheetBg').style.display = 'none', 200); }
+$('sheetCancel').onclick = closeForm; $('sheetBg').onclick = closeForm;
+$('sheetSave').onclick = async () => { $('sheetSave').disabled = true; const ok = await sheetSave(); $('sheetSave').disabled = false; if (ok !== false) closeForm(); };
+const showField = (k, on) => { const el = document.querySelector('#sheetBody .field[data-k="' + k + '"]'); if (el) el.style.display = on ? '' : 'none'; };
+
+// ---- coach tab ----
+const MODE_DESC = { active: 'Full coaching: routines, smart check-ins and follow-ups.',
+  light: 'Low-pressure: routines still run, no extra smart check-ins, shorter nudges.',
+  paused: 'Holiday / sick mode: no check-ins or routines. You can still chat anytime.' };
+const segSet = (id, v) => document.querySelectorAll('#' + id + ' button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => api('set_prefs', { prefs: { coach_mode: b.dataset.v } }, 'Coach mode: ' + b.textContent.trim()));
+document.querySelectorAll('#lenSeg button').forEach(b => b.onclick = () => segSet('lenSeg', b.dataset.v));
+$('savePrefs').onclick = () => api('set_prefs', { prefs: {
+  reply_length: (document.querySelector('#lenSeg button.on') || {}).dataset?.v || 'short',
+  coach_style: $('pStyle').value, quiet_start: $('pQs').value, quiet_end: $('pQe').value,
+  smart_checkins: $('pSmart').checked ? 'on' : 'off',
+  daily_calorie_target: $('pKcal').value, daily_protein_target_g: $('pProt').value } }, 'Preferences saved ✅');
+
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const PRESETS = {
+  interval: { name: 'Every 4 hours', type: 'interval', every_hours: 4, active_from: '09:00', active_to: '21:00', purpose: 'Quick check-in: how are you feeling, what have you eaten, are you on track for today?' },
+  morning: { name: 'Morning check-in', type: 'daily', time: '08:00', purpose: "Morning: sleep and energy check, today's training and food focus." },
+  daily: { name: 'Daily review', type: 'daily', time: '21:30', purpose: "End-of-day review: today's food vs targets with a macros chart, training done, one win, one fix for tomorrow." },
+  weekly: { name: 'Weekly review', type: 'weekly', weekday: 0, time: '20:00', purpose: 'Weekly review with charts (weight, calories, protein, volume): adherence, trends vs goal, then adjust the plan.' },
+  custom: { name: '', type: 'daily', time: '12:00', purpose: '' },
+};
+function editRoutine(r) {
+  const typeChange = () => { const t = $('f_type').value;
+    ['every_hours', 'active_from', 'active_to'].forEach(k => showField(k, t === 'interval'));
+    showField('time', t !== 'interval'); showField('weekday', t === 'weekly'); };
+  openForm(r.id ? 'Edit routine' : 'New routine', [
+    { k: 'name', label: 'Name', value: r.name },
+    { k: 'type', label: 'Repeats', type: 'select', value: r.type, options: [['interval', 'Every few hours'], ['daily', 'Every day'], ['weekly', 'Every week']], onchange: typeChange },
+    { k: 'every_hours', label: 'Every (hours)', type: 'number', value: r.every_hours || 4 },
+    { k: 'active_from', label: 'From', type: 'time', value: r.active_from || '09:00' },
+    { k: 'active_to', label: 'Until', type: 'time', value: r.active_to || '21:00' },
+    { k: 'weekday', label: 'Day', type: 'select', value: r.weekday === '' || r.weekday == null ? 0 : r.weekday, options: DAYS.map((d, i) => [i, d]) },
+    { k: 'time', label: 'Time', type: 'time', value: r.time || '21:00' },
+    { k: 'purpose', label: 'What should the coach do?', type: 'textarea', value: r.purpose, hint: 'Mention "review" to get charts.' },
+  ], v => api('save_routine', { routine: Object.assign({}, v, { id: r.id, enabled: r.id ? r.enabled : true }) }, 'Routine saved ✅'));
+}
+document.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => editRoutine(Object.assign({}, PRESETS[b.dataset.preset])));
+
+// ---- memory tab ----
+const LOG_FIELDS = {
+  meal: [['date', 'Date', 'date'], ['time', 'Time', 'time'], ['meal', 'Meal', 'select', [['breakfast', 'Breakfast'], ['lunch', 'Lunch'], ['dinner', 'Dinner'], ['snack', 'Snack'], ['drink', 'Drink']]],
+         ['description', 'What', 'text'], ['calories', 'kcal', 'number'], ['protein_g', 'Protein (g)', 'number'], ['carbs_g', 'Carbs (g)', 'number'], ['fat_g', 'Fat (g)', 'number']],
+  workout: [['date', 'Date', 'date'], ['exercise', 'Exercise', 'text'], ['sets', 'Sets', 'number'], ['reps', 'Reps (e.g. 8,8,6)', 'text'], ['weight_kg', 'Weight (kg)', 'number'], ['duration_min', 'Minutes', 'number'], ['notes', 'Notes', 'text']],
+  weight: [['date', 'Date', 'date'], ['weight_kg', 'Weight (kg)', 'number'], ['notes', 'Notes', 'text']],
+};
+document.querySelectorAll('#logSeg button').forEach(b => b.onclick = () => { logKind = b.dataset.v; logShown = 15; segSet('logSeg', logKind); renderLogs(); });
+$('addAbout').onclick = () => openForm('Add a fact', [{ k: 'key', label: 'What', value: '', hint: 'e.g. injuries, equipment, favourite food' }, { k: 'value', label: 'Value', value: '' }],
+  v => v.key.trim() ? api('set_profile', v, 'Saved ✅') : (toast('Name it first'), false));
+$('addNote').onclick = () => openForm('Add a note', [{ k: 'note', label: 'Note', type: 'textarea', value: '' }], v => api('add_note', v, 'Note added ✅'));
+document.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => api('save_plan', { kind: b.dataset.plan, content: $(b.dataset.plan === 'workout' ? 'wplanEd' : 'fplanEd').value }, 'Plan saved ✅'));
+$('clearChat').onclick = async () => { if (await confirmBox('Clear chat history? Your coach keeps your profile, plans and logs.')) api('clear_chat', {}, 'Chat cleared'); };
+
+async function del(action, args, what) { if (await confirmBox('Delete ' + what + '?')) api(action, args, 'Deleted'); }
+
+function renderSettings() {
+  if (!S) return;
+  const P = S.prefs;
+  segSet('modeSeg', P.coach_mode); $('modeDesc').textContent = MODE_DESC[P.coach_mode] || '';
+  segSet('lenSeg', P.reply_length); $('pStyle').value = P.coach_style; $('pQs').value = P.quiet_start; $('pQe').value = P.quiet_end;
+  $('pSmart').checked = P.smart_checkins !== 'off'; $('pKcal').value = S.targets.daily_calorie_target; $('pProt').value = S.targets.daily_protein_target_g;
+
+  $('routines').innerHTML = S.routines.length ? S.routines.map((r, i) =>
+    '<div class="item"><div class="grow"><div class="t">' + esc(r.name) + '</div><div class="s">' + esc(r.summary) + (r.last_run ? ' · last ' + esc(String(r.last_run).slice(5)) : '') + '</div>' +
+    '<div class="s">' + esc(r.purpose) + '</div></div>' +
+    '<label class="switch"><input type="checkbox" data-rt="' + i + '"' + (r.enabled ? ' checked' : '') + '><span></span></label>' +
+    '<button class="icon" data-re="' + i + '">✎</button><button class="icon" data-rd="' + i + '">🗑</button></div>').join('')
+    : '<div class="empty">No routines yet. Add one below.</div>';
+  document.querySelectorAll('[data-rt]').forEach(el => el.onchange = () => { const r = S.routines[el.dataset.rt];
+    api('save_routine', { routine: Object.assign({}, r, { enabled: el.checked }) }, r.name + (el.checked ? ' on' : ' off')); });
+  document.querySelectorAll('[data-re]').forEach(el => el.onclick = () => editRoutine(S.routines[el.dataset.re]));
+  document.querySelectorAll('[data-rd]').forEach(el => el.onclick = () => del('delete_routine', { id: S.routines[el.dataset.rd].id }, 'this routine'));
+
+  $('checkinsList').innerHTML = S.checkins.length ? S.checkins.map(c =>
+    '<div class="item"><div class="grow"><div class="t">' + esc(c.due_at.slice(8, 10) + '/' + c.due_at.slice(5, 7) + ' ' + c.due_at.slice(11)) + '</div><div class="s">' + esc(c.reason) + '</div></div>' +
+    '<button class="icon" data-cc="' + c.id + '">✕</button></div>').join('') : '<div class="empty">Nothing scheduled right now.</div>';
+  document.querySelectorAll('[data-cc]').forEach(el => el.onclick = () => del('cancel_checkin', { id: +el.dataset.cc }, 'this check-in'));
+
+  const keys = Object.keys(S.about);
+  $('about').innerHTML = keys.length ? keys.map(k =>
+    '<div class="item"><div class="grow"><div class="s">' + esc(k.replace(/_/g, ' ')) + '</div><div class="t" style="font-weight:500">' + esc(S.about[k]) + '</div></div>' +
+    '<button class="icon" data-ae="' + esc(k) + '">✎</button><button class="icon" data-ad="' + esc(k) + '">🗑</button></div>').join('') : '<div class="empty">Nothing yet. Chat with your coach and it will fill this in.</div>';
+  document.querySelectorAll('[data-ae]').forEach(el => el.onclick = () => { const k = el.dataset.ae;
+    openForm('Edit: ' + k.replace(/_/g, ' '), [{ k: 'value', label: 'Value', type: 'textarea', value: S.about[k] }], v => api('set_profile', { key: k, value: v.value }, 'Saved ✅')); });
+  document.querySelectorAll('[data-ad]').forEach(el => el.onclick = () => del('delete_profile', { key: el.dataset.ad }, '"' + el.dataset.ad.replace(/_/g, ' ') + '"'));
+
+  $('notes').innerHTML = S.notes.length ? S.notes.map((n, i) =>
+    '<div class="item"><div class="grow"><div class="t" style="font-weight:500">' + esc(n.note) + '</div></div>' +
+    '<button class="icon" data-ne="' + i + '">✎</button><button class="icon" data-nd="' + i + '">🗑</button></div>').join('') : '<div class="empty">No notes yet.</div>';
+  document.querySelectorAll('[data-ne]').forEach(el => el.onclick = () => { const n = S.notes[el.dataset.ne];
+    openForm('Edit note', [{ k: 'note', label: 'Note', type: 'textarea', value: n.note }], v => api('update_note', { id: n.id, note: v.note }, 'Saved ✅')); });
+  document.querySelectorAll('[data-nd]').forEach(el => el.onclick = () => del('delete_note', { id: S.notes[el.dataset.nd].id }, 'this note'));
+
+  if (document.activeElement !== $('wplanEd')) $('wplanEd').value = S.plans.workout || '';
+  if (document.activeElement !== $('fplanEd')) $('fplanEd').value = S.plans.food || '';
+  $('chatInfo').textContent = S.chatCount + ' messages in memory';
+  renderLogs();
+}
+
+function renderLogs() {
+  const rows = (S && S.logs[logKind]) || [];
+  const line = { meal: r => [r.date.slice(8) + '/' + r.date.slice(5, 7) + ' ' + (r.time || ''), r.description, (+r.calories || 0) + ' kcal · P' + (+r.protein_g || 0)],
+    workout: r => [r.date.slice(8) + '/' + r.date.slice(5, 7), r.exercise, (r.sets ? r.sets + '×' + r.reps : '') + (r.weight_kg !== '' && r.weight_kg != null ? ' @ ' + r.weight_kg + 'kg' : '') + (r.duration_min ? ' ' + r.duration_min + 'min' : '')],
+    weight: r => [r.date.slice(8) + '/' + r.date.slice(5, 7), r.notes || 'Weigh-in', r.weight_kg + ' kg'] }[logKind];
+  $('logs').innerHTML = rows.length ? rows.slice(0, logShown).map((r, i) => { const [a, b, c] = line(r);
+    return '<div class="item"><div class="grow"><div class="s">' + esc(a) + '</div><div class="t" style="font-weight:500">' + esc(b) + '</div><div class="s">' + esc(c) + '</div></div>' +
+      '<button class="icon" data-le="' + i + '">✎</button><button class="icon" data-ld="' + i + '">🗑</button></div>'; }).join('') +
+      (rows.length > logShown ? '<button class="btn ghost small full" id="moreLogs">Show more (' + (rows.length - logShown) + ')</button>' : '')
+    : '<div class="empty">Nothing logged in this period.</div>';
+  if ($('moreLogs')) $('moreLogs').onclick = () => { logShown += 30; renderLogs(); };
+  document.querySelectorAll('[data-le]').forEach(el => el.onclick = () => { const r = rows[el.dataset.le];
+    openForm('Edit ' + logKind, LOG_FIELDS[logKind].map(f => ({ k: f[0], label: f[1], type: f[2], options: f[3], value: r[f[0]] })),
+      v => api('update_log', { kind: logKind, id: r.id, patch: v }, 'Updated ✅')); });
+  document.querySelectorAll('[data-ld]').forEach(el => el.onclick = () => del('delete_log', { kind: logKind, id: rows[el.dataset.ld].id }, 'this entry'));
+}
+
+// reload dashboard numbers when returning to Today/Progress after edits
+let dashStale = false;
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
+  if ((b.dataset.t === 'today' || b.dataset.t === 'progress') && dashStale) { dashStale = false; load(true); }
+  if ((b.dataset.t === 'coach' || b.dataset.t === 'memory') && !S) api('get');
+}));
+
+$('refresh').onclick = () => { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} load(); if (S) api('get'); };
 load();
 </script>
 </body></html>
