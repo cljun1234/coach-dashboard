@@ -76,6 +76,15 @@
   #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#111827; color:#fff; padding:10px 16px; border-radius:20px;
            font-size:14px; opacity:0; transition:opacity .2s; z-index:20; pointer-events:none; max-width:90%; text-align:center; }
   #toast.on { opacity:.95; }
+  #savebar { position:fixed; top:0; left:0; right:0; height:3px; z-index:30; overflow:hidden; opacity:0; transition:opacity .2s; }
+  #savebar.on { opacity:1; }
+  #savebar:after { content:''; position:absolute; top:0; bottom:0; width:40%; background:var(--accent); animation:slide 1s infinite ease-in-out; }
+  @keyframes slide { from { left:-40%; } to { left:100%; } }
+  .pending { opacity:.55; pointer-events:none; transition:opacity .15s; }
+  .btn[disabled], .seg button[disabled] { opacity:.6; }
+  .spin { display:inline-block; width:12px; height:12px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
+          animation:rot .7s linear infinite; vertical-align:-1px; margin-right:6px; }
+  @keyframes rot { to { transform:rotate(360deg); } }
   .kv { display:grid; grid-template-columns:minmax(90px,35%) 1fr; gap:6px 10px; }
 </style></head>
 <body>
@@ -151,6 +160,7 @@
 <div class="sheet" id="sheet"><h3 id="sheetTitle"></h3><div id="sheetBody"></div>
   <div class="two" style="margin-top:16px"><button class="btn ghost" id="sheetCancel">Cancel</button><button class="btn" id="sheetSave">Save</button></div></div>
 <div id="toast"></div>
+<div id="savebar"></div>
 <script>
 const tg = window.Telegram && Telegram.WebApp;
 try { tg.ready(); tg.expand(); tg.setHeaderColor('secondary_bg_color'); tg.setBackgroundColor('secondary_bg_color'); } catch (e) {}
@@ -176,10 +186,31 @@ const T = D.today, tk = D.targets.kcal, tp = D.targets.protein;
 $('kcal').innerHTML = T.kcal + (tk ? ' <small>/ ' + tk + ' kcal</small>' : ' <small>kcal</small>');
 const kp = tk ? Math.min(100, T.kcal / tk * 100) : 0;
 $('kcalbar').style.width = kp + '%';
-$('kcalbar').style.background = !tk ? css('--accent') : T.kcal > tk * 1.05 ? css('--bad') : T.kcal > tk * 0.9 ? css('--warn') : css('--good');
-$('kcalnote').textContent = tk ? (T.kcal <= tk ? (tk - T.kcal) + ' kcal left' : (T.kcal - tk) + ' kcal over') : 'Set a calorie target with your coach';
+// Colour depends on the goal: cutting → going over is the problem; bulking → falling short is the problem.
+const kcalState = (() => {
+  if (!tk) return { c: '--accent', t: 'Set a calorie target with your coach' };
+  const r = T.kcal / tk, left = tk - T.kcal, over = T.kcal - tk;
+  if (D.goalType === 'cut') {
+    if (r > 1) return { c: '--bad', t: '⚠️ ' + over + ' kcal over your limit' };
+    if (r >= 0.9) return { c: '--warn', t: 'Close to your limit: ' + left + ' kcal left' };
+    return { c: '--good', t: left + ' kcal left' };
+  }
+  if (D.goalType === 'bulk') {
+    if (r > 1.2) return { c: '--bad', t: over + ' kcal over: well above your target' };
+    if (r > 1.1) return { c: '--warn', t: over + ' kcal over target' };
+    if (r >= 0.9) return { c: '--good', t: r >= 1 ? '✅ Target hit (' + over + ' over)' : 'Almost there: ' + left + ' kcal to go' };
+    return { c: '--accent', t: left + ' kcal to go: keep eating 💪' };
+  }
+  if (r > 1.1) return { c: '--bad', t: over + ' kcal over target' };
+  if (r > 1.03) return { c: '--warn', t: over + ' kcal over target' };
+  if (r >= 0.9) return { c: '--good', t: r > 1 ? 'On target (' + over + ' over)' : left + ' kcal left' };
+  return { c: '--accent', t: left + ' kcal left' };
+})();
+$('kcalbar').style.background = css(kcalState.c);
+$('kcalnote').textContent = kcalState.t;
 $('mp').textContent = T.protein + 'g' + (tp ? ' / ' + tp : '');
 $('pbar').style.width = tp ? Math.min(100, T.protein / tp * 100) + '%' : '0';
+$('pbar').style.background = tp && T.protein >= tp ? css('--good') : css('--accent');
 $('mc').textContent = T.carbs + 'g'; $('mf').textContent = T.fat + 'g';
 $('meals').innerHTML = T.meals.length ? T.meals.map(m =>
   '<div class="row"><span class="l">' + esc(m.time) + '</span><span class="m">' + esc(m.desc) + '</span><span class="r">' + m.kcal + ' kcal · P' + m.p + '</span></div>').join('')
@@ -255,6 +286,7 @@ async function load(quiet) {
     if (!j.ok) throw new Error(j.error || 'Unknown error');
     render(j.data);
     status.style.display = 'none'; $('app').style.display = 'block';
+    if (!S) apiNow('get'); // preload Coach/Memory tabs in the background
   } catch (err) {
     status.innerHTML = '⚠️ Could not load: ' + esc(err.message) + '<br><button onclick="load()">Try again</button>';
   }
@@ -267,10 +299,31 @@ const AUTH = () => {
 };
 const API = () => new URLSearchParams(location.search).get('api');
 const toast = (m) => { const t = $('toast'); t.textContent = m; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 1800); };
-const haptic = (k) => { try { tg.HapticFeedback.notificationOccurred(k || 'success'); } catch (e) {} };
+const haptic = (k) => { try { k === 'selection' ? tg.HapticFeedback.selectionChanged() : tg.HapticFeedback.notificationOccurred(k || 'success'); } catch (e) {} };
 const confirmBox = (msg) => new Promise(res => { try { if (tg && tg.showConfirm && tg.platform !== 'unknown') return tg.showConfirm(msg, ok => res(ok)); } catch (e) {} res(window.confirm(msg)); });
 
-async function api(action, args, okMsg) {
+// Saves run one at a time (a burst of taps can't race each other); a thin bar shows while saving.
+let apiChain = Promise.resolve(), inflight = 0;
+function setBusy(d) { inflight += d; $('savebar').classList.toggle('on', inflight > 0); }
+function busyBtn(btn, label) {
+  if (!btn) return () => {};
+  const html = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spin"></span>' + (label || 'Saving…');
+  return () => { btn.disabled = false; btn.innerHTML = html; };
+}
+function api(action, args, okMsg, opts) {
+  opts = opts || {};
+  const done = opts.btn ? busyBtn(opts.btn) : () => {};
+  if (opts.el) opts.el.classList.add('pending');
+  setBusy(1);
+  const run = apiChain.then(() => apiNow(action, args, okMsg)).then(ok => {
+    setBusy(-1); done(); if (opts.el) opts.el.classList.remove('pending');
+    if (!ok && opts.revert) opts.revert();
+    return ok;
+  });
+  apiChain = run.catch(() => {});
+  return run;
+}
+async function apiNow(action, args, okMsg) {
   try {
     const res = await fetch(API() + (API().includes('?') ? '&' : '?') + 'page=api', {
       method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -302,7 +355,7 @@ function openForm(title, fields, onSave) {
 }
 function closeForm() { $('sheet').classList.remove('on'); setTimeout(() => $('sheetBg').style.display = 'none', 200); }
 $('sheetCancel').onclick = closeForm; $('sheetBg').onclick = closeForm;
-$('sheetSave').onclick = async () => { $('sheetSave').disabled = true; const ok = await sheetSave(); $('sheetSave').disabled = false; if (ok !== false) closeForm(); };
+$('sheetSave').onclick = async () => { const done = busyBtn($('sheetSave')); const ok = await sheetSave(); done(); if (ok !== false) closeForm(); };
 const showField = (k, on) => { const el = document.querySelector('#sheetBody .field[data-k="' + k + '"]'); if (el) el.style.display = on ? '' : 'none'; };
 
 // ---- coach tab ----
@@ -310,13 +363,24 @@ const MODE_DESC = { active: 'Full coaching: routines, smart check-ins and follow
   light: 'Low-pressure: routines still run, no extra smart check-ins, shorter nudges.',
   paused: 'Holiday / sick mode: no check-ins or routines. You can still chat anytime.' };
 const segSet = (id, v) => document.querySelectorAll('#' + id + ' button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
-document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => api('set_prefs', { prefs: { coach_mode: b.dataset.v } }, 'Coach mode: ' + b.textContent.trim()));
-document.querySelectorAll('#lenSeg button').forEach(b => b.onclick = () => segSet('lenSeg', b.dataset.v));
-$('savePrefs').onclick = () => api('set_prefs', { prefs: {
+let modeTimer = null;
+document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => {
+  const prev = S && S.prefs.coach_mode, v = b.dataset.v;
+  segSet('modeSeg', v); $('modeDesc').textContent = MODE_DESC[v]; haptic('selection');
+  clearTimeout(modeTimer); // wait for the taps to settle, then save once
+  modeTimer = setTimeout(() => { if (v !== prev) api('set_prefs', { prefs: { coach_mode: v } }, 'Coach mode: ' + b.textContent.trim(),
+    { revert: () => { segSet('modeSeg', prev); $('modeDesc').textContent = MODE_DESC[prev] || ''; } }); }, 500);
+});
+document.querySelectorAll('#lenSeg button').forEach(b => b.onclick = () => { segSet('lenSeg', b.dataset.v); haptic('selection');
+  api('set_prefs', { prefs: { reply_length: b.dataset.v } }, 'Replies: ' + b.textContent.trim()); });
+$('pSmart').onchange = () => api('set_prefs', { prefs: { smart_checkins: $('pSmart').checked ? 'on' : 'off' } },
+  'Smart check-ins ' + ($('pSmart').checked ? 'on' : 'off'), { el: $('pSmart').closest('.switch'), revert: () => { $('pSmart').checked = !$('pSmart').checked; } });
+['pStyle', 'pQs', 'pQe', 'pKcal', 'pProt'].forEach(id => $(id).addEventListener('input', () => { $(id).dataset.dirty = '1'; }));
+$('savePrefs').onclick = () => { ['pStyle', 'pQs', 'pQe', 'pKcal', 'pProt'].forEach(id => delete $(id).dataset.dirty); return api('set_prefs', { prefs: {
   reply_length: (document.querySelector('#lenSeg button.on') || {}).dataset?.v || 'short',
   coach_style: $('pStyle').value, quiet_start: $('pQs').value, quiet_end: $('pQe').value,
   smart_checkins: $('pSmart').checked ? 'on' : 'off',
-  daily_calorie_target: $('pKcal').value, daily_protein_target_g: $('pProt').value } }, 'Preferences saved ✅');
+  daily_calorie_target: $('pKcal').value, daily_protein_target_g: $('pProt').value } }, 'Preferences saved ✅', { btn: $('savePrefs') }); };
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PRESETS = {
@@ -354,17 +418,21 @@ document.querySelectorAll('#logSeg button').forEach(b => b.onclick = () => { log
 $('addAbout').onclick = () => openForm('Add a fact', [{ k: 'key', label: 'What', value: '', hint: 'e.g. injuries, equipment, favourite food' }, { k: 'value', label: 'Value', value: '' }],
   v => v.key.trim() ? api('set_profile', v, 'Saved ✅') : (toast('Name it first'), false));
 $('addNote').onclick = () => openForm('Add a note', [{ k: 'note', label: 'Note', type: 'textarea', value: '' }], v => api('add_note', v, 'Note added ✅'));
-document.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => api('save_plan', { kind: b.dataset.plan, content: $(b.dataset.plan === 'workout' ? 'wplanEd' : 'fplanEd').value }, 'Plan saved ✅'));
-$('clearChat').onclick = async () => { if (await confirmBox('Clear chat history? Your coach keeps your profile, plans and logs.')) api('clear_chat', {}, 'Chat cleared'); };
+document.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => api('save_plan', { kind: b.dataset.plan, content: $(b.dataset.plan === 'workout' ? 'wplanEd' : 'fplanEd').value }, 'Plan saved ✅', { btn: b }));
+$('clearChat').onclick = async () => { if (await confirmBox('Clear chat history? Your coach keeps your profile, plans and logs.')) api('clear_chat', {}, 'Chat cleared', { btn: $('clearChat') }); };
 
-async function del(action, args, what) { if (await confirmBox('Delete ' + what + '?')) api(action, args, 'Deleted'); }
+async function del(action, args, what, el) { if (await confirmBox('Delete ' + what + '?')) api(action, args, 'Deleted', { el: el && el.closest('.item') }); }
 
 function renderSettings() {
   if (!S) return;
   const P = S.prefs;
   segSet('modeSeg', P.coach_mode); $('modeDesc').textContent = MODE_DESC[P.coach_mode] || '';
-  segSet('lenSeg', P.reply_length); $('pStyle').value = P.coach_style; $('pQs').value = P.quiet_start; $('pQe').value = P.quiet_end;
-  $('pSmart').checked = P.smart_checkins !== 'off'; $('pKcal').value = S.targets.daily_calorie_target; $('pProt').value = S.targets.daily_protein_target_g;
+  segSet('lenSeg', P.reply_length);
+  // don't overwrite fields the user is still editing
+  const setIf = (id, v) => { const el = $(id); if (!el.dataset.dirty && document.activeElement !== el) el.value = v; };
+  setIf('pStyle', P.coach_style); setIf('pQs', P.quiet_start); setIf('pQe', P.quiet_end);
+  setIf('pKcal', S.targets.daily_calorie_target); setIf('pProt', S.targets.daily_protein_target_g);
+  $('pSmart').checked = P.smart_checkins !== 'off';
 
   $('routines').innerHTML = S.routines.length ? S.routines.map((r, i) =>
     '<div class="item"><div class="grow"><div class="t">' + esc(r.name) + '</div><div class="s">' + esc(r.summary) + (r.last_run ? ' · last ' + esc(String(r.last_run).slice(5)) : '') + '</div>' +
@@ -373,14 +441,15 @@ function renderSettings() {
     '<button class="icon" data-re="' + i + '">✎</button><button class="icon" data-rd="' + i + '">🗑</button></div>').join('')
     : '<div class="empty">No routines yet. Add one below.</div>';
   document.querySelectorAll('[data-rt]').forEach(el => el.onchange = () => { const r = S.routines[el.dataset.rt];
-    api('save_routine', { routine: Object.assign({}, r, { enabled: el.checked }) }, r.name + (el.checked ? ' on' : ' off')); });
+    api('save_routine', { routine: Object.assign({}, r, { enabled: el.checked }) }, r.name + (el.checked ? ' on' : ' off'),
+      { el: el.closest('.item'), revert: () => { el.checked = !el.checked; } }); });
   document.querySelectorAll('[data-re]').forEach(el => el.onclick = () => editRoutine(S.routines[el.dataset.re]));
-  document.querySelectorAll('[data-rd]').forEach(el => el.onclick = () => del('delete_routine', { id: S.routines[el.dataset.rd].id }, 'this routine'));
+  document.querySelectorAll('[data-rd]').forEach(el => el.onclick = () => del('delete_routine', { id: S.routines[el.dataset.rd].id }, 'this routine', el));
 
   $('checkinsList').innerHTML = S.checkins.length ? S.checkins.map(c =>
     '<div class="item"><div class="grow"><div class="t">' + esc(c.due_at.slice(8, 10) + '/' + c.due_at.slice(5, 7) + ' ' + c.due_at.slice(11)) + '</div><div class="s">' + esc(c.reason) + '</div></div>' +
     '<button class="icon" data-cc="' + c.id + '">✕</button></div>').join('') : '<div class="empty">Nothing scheduled right now.</div>';
-  document.querySelectorAll('[data-cc]').forEach(el => el.onclick = () => del('cancel_checkin', { id: +el.dataset.cc }, 'this check-in'));
+  document.querySelectorAll('[data-cc]').forEach(el => el.onclick = () => del('cancel_checkin', { id: +el.dataset.cc }, 'this check-in', el));
 
   const keys = Object.keys(S.about);
   $('about').innerHTML = keys.length ? keys.map(k =>
@@ -388,14 +457,14 @@ function renderSettings() {
     '<button class="icon" data-ae="' + esc(k) + '">✎</button><button class="icon" data-ad="' + esc(k) + '">🗑</button></div>').join('') : '<div class="empty">Nothing yet. Chat with your coach and it will fill this in.</div>';
   document.querySelectorAll('[data-ae]').forEach(el => el.onclick = () => { const k = el.dataset.ae;
     openForm('Edit: ' + k.replace(/_/g, ' '), [{ k: 'value', label: 'Value', type: 'textarea', value: S.about[k] }], v => api('set_profile', { key: k, value: v.value }, 'Saved ✅')); });
-  document.querySelectorAll('[data-ad]').forEach(el => el.onclick = () => del('delete_profile', { key: el.dataset.ad }, '"' + el.dataset.ad.replace(/_/g, ' ') + '"'));
+  document.querySelectorAll('[data-ad]').forEach(el => el.onclick = () => del('delete_profile', { key: el.dataset.ad }, '"' + el.dataset.ad.replace(/_/g, ' ') + '"', el));
 
   $('notes').innerHTML = S.notes.length ? S.notes.map((n, i) =>
     '<div class="item"><div class="grow"><div class="t" style="font-weight:500">' + esc(n.note) + '</div></div>' +
     '<button class="icon" data-ne="' + i + '">✎</button><button class="icon" data-nd="' + i + '">🗑</button></div>').join('') : '<div class="empty">No notes yet.</div>';
   document.querySelectorAll('[data-ne]').forEach(el => el.onclick = () => { const n = S.notes[el.dataset.ne];
     openForm('Edit note', [{ k: 'note', label: 'Note', type: 'textarea', value: n.note }], v => api('update_note', { id: n.id, note: v.note }, 'Saved ✅')); });
-  document.querySelectorAll('[data-nd]').forEach(el => el.onclick = () => del('delete_note', { id: S.notes[el.dataset.nd].id }, 'this note'));
+  document.querySelectorAll('[data-nd]').forEach(el => el.onclick = () => del('delete_note', { id: S.notes[el.dataset.nd].id }, 'this note', el));
 
   if (document.activeElement !== $('wplanEd')) $('wplanEd').value = S.plans.workout || '';
   if (document.activeElement !== $('fplanEd')) $('fplanEd').value = S.plans.food || '';
@@ -417,14 +486,14 @@ function renderLogs() {
   document.querySelectorAll('[data-le]').forEach(el => el.onclick = () => { const r = rows[el.dataset.le];
     openForm('Edit ' + logKind, LOG_FIELDS[logKind].map(f => ({ k: f[0], label: f[1], type: f[2], options: f[3], value: r[f[0]] })),
       v => api('update_log', { kind: logKind, id: r.id, patch: v }, 'Updated ✅')); });
-  document.querySelectorAll('[data-ld]').forEach(el => el.onclick = () => del('delete_log', { kind: logKind, id: rows[el.dataset.ld].id }, 'this entry'));
+  document.querySelectorAll('[data-ld]').forEach(el => el.onclick = () => del('delete_log', { kind: logKind, id: rows[el.dataset.ld].id }, 'this entry', el));
 }
 
 // reload dashboard numbers when returning to Today/Progress after edits
 let dashStale = false;
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => {
   if ((b.dataset.t === 'today' || b.dataset.t === 'progress') && dashStale) { dashStale = false; load(true); }
-  if ((b.dataset.t === 'coach' || b.dataset.t === 'memory') && !S) api('get');
+  if ((b.dataset.t === 'coach' || b.dataset.t === 'memory') && !S) { toast('Loading settings…'); api('get'); }
 }));
 
 $('refresh').onclick = () => { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} load(); if (S) api('get'); };
