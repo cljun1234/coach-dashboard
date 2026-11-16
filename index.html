@@ -85,6 +85,13 @@
   .spin { display:inline-block; width:12px; height:12px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
           animation:rot .7s linear infinite; vertical-align:-1px; margin-right:6px; }
   @keyframes rot { to { transform:rotate(360deg); } }
+  .badge { display:inline-block; padding:5px 9px; border-radius:8px; font-size:12.5px; font-weight:600; line-height:1.35; margin-top:8px; }
+  .b-good { background:rgba(22,163,74,.15); color:var(--good); } .b-warn { background:rgba(245,158,11,.15); color:var(--warn); }
+  .b-bad { background:rgba(239,68,68,.15); color:var(--bad); } .b-info { background:rgba(127,127,127,.12); color:var(--muted); }
+  #goalPill { margin:6px 0 2px; font-size:13px; color:var(--muted); }
+  #goalPill b { color:var(--text); }
+  .lift { display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .lift:last-child { border-bottom:0; }
   .kv { display:grid; grid-template-columns:minmax(90px,35%) 1fr; gap:6px 10px; }
 </style></head>
 <body>
@@ -102,22 +109,12 @@
         <div class="macro"><b id="mc"></b><span>Carbs</span></div>
         <div class="macro"><b id="mf"></b><span>Fat</span></div>
       </div></div>
+    <div class="card" id="todayBody" style="display:none"><h2>Sleep & activity</h2><div class="stats" id="todayBodyStats"></div></div>
     <div class="card"><h2>Meals today</h2><div id="meals"></div></div>
     <div class="card"><h2>Training today</h2><div id="workouts"></div></div>
     <div class="card"><h2>Coach check-ins</h2><div id="checkins"></div></div>
   </section>
-  <section class="tab" id="progress">
-    <div class="card"><h2>Last 7 days</h2><div class="stats">
-      <div class="stat"><b id="sTrain"></b><span>training days</span></div>
-      <div class="stat"><b id="sStreak"></b><span>day logging streak</span></div>
-      <div class="stat"><b id="sKcal"></b><span>avg kcal (logged days)</span></div>
-      <div class="stat"><b id="sProt"></b><span>avg protein</span></div></div></div>
-    <div class="card"><h2>Body weight</h2><div id="wNote" class="empty"></div><canvas id="cWeight"></canvas></div>
-    <div class="card"><h2>Calories · 14 days</h2><canvas id="cKcal"></canvas></div>
-    <div class="card"><h2>Protein · 14 days</h2><canvas id="cProt"></canvas></div>
-    <div class="card"><h2>Training volume · 14 days</h2><canvas id="cVol"></canvas></div>
-    <div class="card"><h2>Lift progress</h2><select id="exSel"></select><div id="exNote" class="empty"></div><canvas id="cEx"></canvas></div>
-  </section>
+  <section class="tab" id="progress"><div id="goalPill"></div><div id="pcards"></div></section>
   <section class="tab" id="coach">
     <div class="card"><h2>Coach mode</h2>
       <div class="seg" id="modeSeg"><button data-v="active">💪 Active</button><button data-v="light">🌿 Light</button><button data-v="paused">⏸ Paused</button></div>
@@ -127,11 +124,14 @@
         <div class="seg" id="lenSeg"><button data-v="short">Short</button><button data-v="normal">Normal</button><button data-v="detailed">Detailed</button></div></div>
       <div class="field"><label>Coaching style</label><input type="text" id="pStyle" list="styles" placeholder="e.g. tough love">
         <datalist id="styles"><option>tough love</option><option>chill</option><option>cheerleader</option><option>drill sergeant</option><option>friendly but honest</option></datalist></div>
-      <div class="field"><label>Quiet hours (no AI check-ins)</label><div class="two"><input type="time" id="pQs"><input type="time" id="pQe"></div></div>
+      <div class="field"><label>Quiet hours (no AI check-ins)</label>
+        <div class="rowx" style="margin-bottom:8px"><span style="font-size:14px">Learn from my sleep</span><label class="switch"><input type="checkbox" id="pQauto"><span></span></label></div>
+        <div class="two" id="quietManual"><input type="time" id="pQs"><input type="time" id="pQe"></div><p class="hint" id="quietInfo"></p></div>
       <div class="field rowx"><div><b style="font-size:14px">Smart check-ins</b><p class="hint">Coach plans extra check-ins each morning around your plan (pre-workout, meal nudges).</p></div>
         <label class="switch"><input type="checkbox" id="pSmart"><span></span></label></div>
       <div class="field"><label>Daily targets</label><div class="two"><input type="number" id="pKcal" placeholder="kcal"><input type="number" id="pProt" placeholder="protein g"></div></div>
       <button class="btn full" id="savePrefs">Save preferences</button></div>
+    <div class="card"><h2>What to track</h2><p class="hint" style="margin-top:-4px" id="trackHint"></p><div id="trackers"></div></div>
     <div class="card"><h2>Routines</h2><p class="hint" style="margin-top:-4px">Fixed check-ins your coach always runs. Reviews include charts.</p>
       <div id="routines"></div>
       <div class="chips"><button class="chip" data-preset="interval">＋ Every 4 hours</button><button class="chip" data-preset="morning">＋ Morning check-in</button>
@@ -148,7 +148,7 @@
     <div class="card"><h2>🍽 Food plan</h2><textarea id="fplanEd" placeholder="No food plan yet."></textarea>
       <button class="btn small" style="margin-top:8px" data-plan="food">Save food plan</button></div>
     <div class="card"><h2>Logs</h2>
-      <div class="seg" id="logSeg"><button data-v="meal" class="on">Meals</button><button data-v="workout">Workouts</button><button data-v="weight">Weight</button></div>
+      <div class="seg" id="logSeg"><button data-v="meal" class="on">Meals</button><button data-v="workout">Training</button><button data-v="weight">Weight</button><button data-v="sleep">Sleep</button><button data-v="metric">Body</button></div>
       <div id="logs" style="margin-top:6px"></div></div>
     <div class="card"><h2>Chat history</h2><p class="hint" style="margin-top:-4px" id="chatInfo"></p>
       <button class="btn danger full" id="clearChat">Clear chat history</button>
@@ -223,52 +223,24 @@ $('checkins').innerHTML = D.checkins.length ? D.checkins.map(c =>
   '<div class="row"><span class="l">' + esc(c.at.slice(8, 10) + '/' + c.at.slice(5, 7) + ' ' + c.at.slice(11)) + '</span><span class="m">' + esc(c.reason) + '</span></div>').join('')
   : '<div class="empty">No check-ins scheduled.</div>';
 
-// ---- progress stats
-$('sTrain').textContent = D.week.trainDays + ' / 7';
-$('sStreak').textContent = D.week.streak + ' 🔥';
-$('sKcal').textContent = D.week.avgKcal || '–';
-$('sProt').textContent = D.week.avgProtein ? D.week.avgProtein + 'g' : '–';
-
-// ---- charts
-if (window.Chart) Object.values(Chart.instances || {}).forEach(c => c.destroy());
-if (window.Chart) {
-  Chart.defaults.color = css('--muted');
-  Chart.defaults.borderColor = css('--line');
-  Chart.defaults.font.family = '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif';
-  const opts = (extra) => Object.assign({ responsive:true, maintainAspectRatio:true, aspectRatio:1.8,
-    plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } }, extra || {});
-  const targetLine = (n, len) => n ? [{ type:'line', data:Array(len).fill(n), borderColor:css('--bad'), borderDash:[6,4], pointRadius:0, borderWidth:1.5 }] : [];
-
-  if (D.weights.length) {
-    const v = D.weights.map(p => p[1]);
-    const ch = (v[v.length-1] - v[0]).toFixed(1);
-    $('wNote').textContent = 'Latest ' + v[v.length-1] + 'kg · ' + (ch > 0 ? '+' : '') + ch + 'kg since ' + lbl(D.weights[0][0]);
-    new Chart($('cWeight'), { type:'line', data:{ labels:D.weights.map(p => lbl(p[0])),
-      datasets:[{ data:v, borderColor:css('--accent'), backgroundColor:'rgba(37,99,235,.12)', fill:true, tension:.3 }] },
-      options: opts({ scales:{ y:{ suggestedMin:Math.min(...v)-1, suggestedMax:Math.max(...v)+1 } } }) });
-  } else { $('wNote').textContent = 'No weigh-ins yet. Tell your coach your weight.'; $('cWeight').style.display = 'none'; }
-
-  const L = D.days14.map(lbl);
-  new Chart($('cKcal'), { data:{ labels:L, datasets:[{ type:'bar', data:D.kcal14, backgroundColor:css('--accent'), borderRadius:4 }].concat(targetLine(tk, L.length)) }, options:opts() });
-  new Chart($('cProt'), { data:{ labels:L, datasets:[{ type:'bar', data:D.protein14, backgroundColor:css('--p'), borderRadius:4 }].concat(targetLine(tp, L.length)) }, options:opts() });
-  new Chart($('cVol'), { type:'bar', data:{ labels:L, datasets:[{ data:D.volume14, backgroundColor:css('--f'), borderRadius:4 }] }, options:opts() });
-
-  let exChart;
-  if (D.exercises.length) {
-    $('exSel').innerHTML = D.exercises.map((e, i) => '<option value="' + i + '">' + esc(e.name) + ' (' + e.points.length + ' sessions)</option>').join('');
-    const drawEx = i => {
-      const e = D.exercises[i], v = e.points.map(p => p[1]);
-      $('exNote').textContent = 'Best ' + Math.max(...v) + 'kg' + (v.length > 1 ? ' · ' + (v[v.length-1] - v[0] >= 0 ? '+' : '') + (v[v.length-1] - v[0]) + 'kg since first session' : '');
-      if (exChart) exChart.destroy();
-      exChart = new Chart($('cEx'), { type:'line', data:{ labels:e.points.map(p => lbl(p[0])),
-        datasets:[{ data:v, borderColor:css('--p'), backgroundColor:css('--p'), tension:.2 }] }, options:opts({ scales:{ y:{ beginAtZero:false } } }) });
-    };
-    $('exSel').onchange = ev => drawEx(+ev.target.value);
-    drawEx(0);
-  } else { $('exSel').style.display = 'none'; $('exNote').textContent = 'Log weighted lifts to see progress here.'; $('cEx').style.display = 'none'; }
+// ---- today: hide what isn't tracked, show sleep/steps if tracked
+const TR = D.tracking || {};
+['kcal', 'kcalnote'].forEach(id => $(id).style.display = TR.calories === false ? 'none' : '');
+$('kcalbar').parentNode.style.display = TR.calories === false ? 'none' : '';
+$('mp').parentNode.style.display = TR.protein === false ? 'none' : '';
+const tb = [];
+if (TR.sleep) {
+  const ln = D.sleep && D.sleep.lastNight;
+  tb.push('<div class="stat"><b>' + (ln ? ln[1] + 'h' + (ln[4] ? ' · ' + '★'.repeat(ln[4]) : '') : '–') + '</b><span>' + (ln ? 'last night (' + esc(ln[2] || '?') + '–' + esc(ln[3] || '?') + ')' : 'last night: tell your coach') + '</span></div>');
 }
+if (TR.steps) {
+  const st = (D.steps || []).filter(p => p[0] === D.days14[D.days14.length - 1]);
+  tb.push('<div class="stat"><b>' + (st.length ? st[0][1].toLocaleString() : '–') + '</b><span>steps today</span></div>');
+}
+$('todayBody').style.display = tb.length ? '' : 'none';
+$('todayBodyStats').innerHTML = tb.join('');
 
-
+renderProgress(D);
 }
 
 async function load(quiet) {
@@ -291,6 +263,116 @@ async function load(quiet) {
     status.innerHTML = '⚠️ Could not load: ' + esc(err.message) + '<br><button onclick="load()">Try again</button>';
   }
 }
+// =================== Progress tab: adapts to goal + tracking ===================
+const GOAL_LABEL = { cut: 'Lose weight', bulk: 'Build muscle', maintain: 'Maintain' };
+const ORDER = {
+  cut: ['summary', 'weight', 'calories', 'protein', 'waist', 'steps', 'sleep', 'strength', 'volume'],
+  bulk: ['summary', 'strength', 'volume', 'weight', 'calories', 'protein', 'sleep', 'waist', 'steps'],
+  maintain: ['summary', 'weight', 'steps', 'sleep', 'calories', 'protein', 'strength', 'volume', 'waist'],
+};
+const NEEDS = { weight: 'weight', calories: 'calories', protein: 'protein', strength: 'training', volume: 'training', sleep: 'sleep', waist: 'waist', steps: 'steps' };
+const signed = (x, u) => (x > 0 ? '+' : '') + x + (u || '');
+const badge = (cls, txt) => '<div class="badge b-' + cls + '">' + txt + '</div>';
+
+function weightBadge(D) {
+  const w = D.weightTrend, g = D.goalType;
+  if (!w || w.status === 'not_enough_data') return badge('info', 'Log your weight 3+ times a week; the trend appears after about a week.');
+  const r = signed(w.ratePerWeek, ' kg/wk') + ' (' + signed(w.ratePct, '%') + ')';
+  const M = {
+    cut: { on_pace: ['good', '✅ On pace: ' + r], too_fast: ['warn', '⚠️ Losing fast: ' + r + '. Eat a little more to protect muscle.'],
+      too_slow: ['warn', '🐢 Slower than target: ' + r + '. Consider −100–200 kcal or more steps.'], wrong_direction: ['bad', '⬆️ Trending up: ' + r] },
+    bulk: { on_pace: ['good', '✅ Lean-gain pace: ' + r], too_fast: ['warn', '⚠️ Gaining fast: ' + r + '. Likely extra fat; trim 100–200 kcal.'],
+      too_slow: ['warn', '🐢 Gaining slowly: ' + r + '. Add 100–200 kcal.'], wrong_direction: ['bad', '⬇️ Losing weight: ' + r + '. Eat more.'] },
+    maintain: { on_pace: ['good', '✅ Stable: ' + r], gaining: ['warn', '⬆️ Drifting up: ' + r], losing: ['warn', '⬇️ Drifting down: ' + r] },
+  }[g] || {};
+  const m = M[w.status] || ['info', r];
+  return badge(m[0], m[1]) + '<p class="hint">Healthy pace: ' + esc(D.pace ? D.pace.label : '') + '. Judged on your 7-day average, not single weigh-ins.</p>';
+}
+
+function renderProgress(D) {
+  if (window.Chart) Object.values(Chart.instances || {}).forEach(c => c.destroy());
+  const g = D.goalType || 'maintain', TR = D.tracking || {}, tk = D.targets.kcal, tp = D.targets.protein, A = D.adherence || {};
+  $('goalPill').innerHTML = '🎯 Goal: <b>' + GOAL_LABEL[g] + '</b>' + (D.pace ? ' · ' + esc(D.pace.label) : '');
+  const cards = ORDER[g].filter(k => !NEEDS[k] || TR[NEEDS[k]] !== false);
+  const html = { summary: () => {
+      const st = ['<div class="stat"><b>' + A.trainDays + ' / 7</b><span>training days</span></div>'];
+      if (TR.calories !== false) st.push('<div class="stat"><b>' + (A.kcalHit != null && A.judgedDays ? A.kcalHit + ' / ' + A.judgedDays : '–') + '</b><span>' +
+        (g === 'cut' ? 'days at or under calories' : g === 'bulk' ? 'days calories hit' : 'days near calorie target') + '</span></div>');
+      if (TR.protein !== false) st.push('<div class="stat"><b>' + (A.proteinHit != null && A.judgedDays ? A.proteinHit + ' / ' + A.judgedDays : '–') + '</b><span>days protein hit</span></div>');
+      st.push('<div class="stat"><b>' + D.week.streak + ' 🔥</b><span>day logging streak</span></div>');
+      return '<div class="card"><h2>This week</h2><div class="stats">' + st.join('') + '</div>' +
+        (TR.calories !== false && (A.kcalHit == null) ? '<p class="hint">Set calorie & protein targets in the Coach tab to see adherence.</p>' : '') + '</div>'; },
+    weight: () => '<div class="card"><h2>Body weight · trend</h2>' + (D.weightTrend && D.weightTrend.avg != null ?
+      '<div class="big">' + D.weightTrend.avg + ' <small>kg (7-day avg)</small></div>' : '') + weightBadge(D) + '<canvas id="cWeight"></canvas></div>',
+    calories: () => '<div class="card"><h2>Calories · 14 days</h2><canvas id="cKcal"></canvas></div>',
+    protein: () => '<div class="card"><h2>Protein · 14 days</h2><canvas id="cProt"></canvas></div>',
+    volume: () => '<div class="card"><h2>Training volume · 14 days</h2><canvas id="cVol"></canvas></div>',
+    strength: () => {
+      const S = (D.strength || []).filter(x => x.status !== 'new');
+      const icon = x => g === 'bulk' ? (x.status === 'up' ? '✅' : x.status === 'steady' ? '🟠 stalled' : '⚠️') : (x.status === 'down' ? '⚠️' : '✅');
+      return '<div class="card"><h2>' + (g === 'cut' ? 'Strength check' : 'Lift progress') + '</h2>' +
+        (g === 'cut' ? '<p class="hint" style="margin-top:-4px">While cutting, holding your lifts means you are keeping muscle.</p>' : '') +
+        (S.length ? S.map(x => '<div class="lift"><span>' + esc(x.name) + '</span><span><b>' + x.from + ' → ' + x.to + 'kg</b> ' + icon(x) + '</span></div>').join('') : '') +
+        '<select id="exSel" style="margin-top:10px"></select><div id="exNote" class="empty"></div><canvas id="cEx"></canvas></div>'; },
+    sleep: () => { const Sl = D.sleep || {};
+      const ok = Sl.avgHours >= 7, mid = Sl.avgHours >= 6;
+      return '<div class="card"><h2>Sleep</h2>' + (Sl.nights ? '<div class="stats">' +
+        '<div class="stat"><b>' + Sl.avgHours + 'h</b><span>avg per night (7d)</span></div>' +
+        '<div class="stat"><b>' + (Sl.avgQuality ? Sl.avgQuality + ' / 5' : '–') + '</b><span>quality</span></div>' +
+        '<div class="stat"><b>' + (Sl.bedtimeSpreadMin != null ? '±' + Sl.bedtimeSpreadMin + 'm' : '–') + '</b><span>bedtime consistency</span></div>' +
+        '<div class="stat"><b>' + esc(Sl.typicalBed || '–') + '–' + esc(Sl.typicalWake || '–') + '</b><span>usual sleep window</span></div></div>' +
+        badge(ok ? 'good' : mid ? 'warn' : 'bad', ok ? '✅ Good sleep: keep the window consistent' : mid ? '🟠 A bit short: aim for 7–9h' : '⚠️ Short sleep: hunger and recovery suffer') +
+        (Sl.bedtimeSpreadMin > 60 ? badge('warn', '🕐 Bedtime varies a lot; a steadier window helps energy and appetite') : '') +
+        '<canvas id="cSleep"></canvas>' : '<div class="empty">No sleep logged yet. Tell your coach when you slept and woke.</div>') + '</div>'; },
+    waist: () => { const W = D.waist || [];
+      return '<div class="card"><h2>Waist</h2>' + (W.length ? '<div class="big">' + W[W.length - 1][1] + ' <small>cm</small></div>' +
+        (W.length > 1 ? badge(W[W.length - 1][1] < W[0][1] ? 'good' : g === 'cut' ? 'warn' : 'info', signed(Math.round((W[W.length - 1][1] - W[0][1]) * 10) / 10, ' cm') + ' since ' + lbl(W[0][0])) : '') +
+        '<canvas id="cWaist"></canvas>' : '<div class="empty">Measure at the belly button once a week and tell your coach. It shows fat loss even when the scale stalls.</div>') + '</div>'; },
+    steps: () => { const St = D.steps || [];
+      const avg = St.length ? Math.round(St.reduce((s, p) => s + p[1], 0) / St.length) : 0;
+      return '<div class="card"><h2>Steps</h2>' + (St.length ? '<div class="big">' + avg.toLocaleString() + ' <small>avg / day</small></div>' +
+        badge(avg >= 8000 ? 'good' : avg >= 5000 ? 'warn' : 'bad', avg >= 8000 ? '✅ Active' : avg >= 5000 ? '🟠 Aim for 8,000+' : '⚠️ Low activity: walking is the easiest extra burn') +
+        '<canvas id="cSteps"></canvas>' : '<div class="empty">Tell your coach your daily steps (from your phone or watch).</div>') + '</div>'; },
+  };
+  $('pcards').innerHTML = cards.map(k => html[k]()).join('');
+
+  if (!window.Chart) return;
+  Chart.defaults.color = css('--muted'); Chart.defaults.borderColor = css('--line');
+  Chart.defaults.font.family = '-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif';
+  const opts = (extra) => Object.assign({ responsive:true, maintainAspectRatio:true, aspectRatio:1.8, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } }, extra || {});
+  const line = (n, len, col) => n ? [{ type:'line', data:Array(len).fill(n), borderColor:col || css('--bad'), borderDash:[6,4], pointRadius:0, borderWidth:1.5 }] : [];
+  const L = D.days14.map(lbl);
+  if ($('cWeight') && D.weightTrend && D.weightTrend.series.length) {
+    const ws = D.weightTrend.series, v = ws.map(p => p[1]);
+    new Chart($('cWeight'), { type:'line', data:{ labels:ws.map(p => lbl(p[0])), datasets:[
+      { data:v, borderColor:'transparent', backgroundColor:'rgba(127,127,127,.45)', pointRadius:3, showLine:false },
+      { data:ws.map(p => p[2]), borderColor:css('--accent'), pointRadius:0, tension:.3, borderWidth:2.5 }] },
+      options:opts({ scales:{ y:{ suggestedMin:Math.min(...v) - 0.5, suggestedMax:Math.max(...v) + 0.5 } } }) });
+  } else if ($('cWeight')) $('cWeight').style.display = 'none';
+  if ($('cKcal')) new Chart($('cKcal'), { data:{ labels:L, datasets:[{ type:'bar', data:D.kcal14, borderRadius:4,
+    backgroundColor:D.kcal14.map(k => !tk || !k ? css('--accent') : g === 'cut' ? (k <= tk * 1.02 ? css('--good') : css('--bad')) : g === 'bulk' ? (k >= tk * 0.95 ? css('--good') : css('--warn')) : (Math.abs(k - tk) <= tk * 0.1 ? css('--good') : css('--warn'))) }].concat(line(tk, L.length)) }, options:opts() });
+  if ($('cProt')) new Chart($('cProt'), { data:{ labels:L, datasets:[{ type:'bar', data:D.protein14, borderRadius:4,
+    backgroundColor:D.protein14.map(x => tp && x >= tp * 0.9 ? css('--good') : css('--accent')) }].concat(line(tp, L.length)) }, options:opts() });
+  if ($('cVol')) new Chart($('cVol'), { type:'bar', data:{ labels:L, datasets:[{ data:D.volume14, backgroundColor:css('--f'), borderRadius:4 }] }, options:opts() });
+  if ($('cSleep') && D.sleep.series.length) { const ss = D.sleep.series;
+    new Chart($('cSleep'), { data:{ labels:ss.map(p => lbl(p[0])), datasets:[{ type:'bar', data:ss.map(p => p[1]), borderRadius:4,
+      backgroundColor:ss.map(p => p[1] >= 7 ? css('--good') : p[1] >= 6 ? css('--warn') : css('--bad')) }].concat(line(7, ss.length, css('--good'))) }, options:opts() }); }
+  if ($('cWaist') && D.waist.length) new Chart($('cWaist'), { type:'line', data:{ labels:D.waist.map(p => lbl(p[0])), datasets:[{ data:D.waist.map(p => p[1]), borderColor:css('--f'), backgroundColor:css('--f'), tension:.2 }] }, options:opts({ scales:{ y:{ beginAtZero:false } } }) });
+  if ($('cSteps') && D.steps.length) new Chart($('cSteps'), { type:'bar', data:{ labels:D.steps.map(p => lbl(p[0])), datasets:[{ data:D.steps.map(p => p[1]), borderRadius:4,
+    backgroundColor:D.steps.map(p => p[1] >= 8000 ? css('--good') : css('--accent')) }].concat(line(8000, D.steps.length, css('--good'))) }, options:opts() });
+  if ($('exSel')) {
+    let exChart;
+    if (D.exercises.length) {
+      $('exSel').innerHTML = D.exercises.map((e, i) => '<option value="' + i + '">' + esc(e.name) + ' (' + e.points.length + ' sessions)</option>').join('');
+      const drawEx = i => { const e = D.exercises[i], v = e.points.map(p => p[1]);
+        $('exNote').textContent = 'Best ' + Math.max(...v) + 'kg' + (v.length > 1 ? ' · ' + signed(v[v.length - 1] - v[0], 'kg') + ' since first session' : '');
+        if (exChart) exChart.destroy();
+        exChart = new Chart($('cEx'), { type:'line', data:{ labels:e.points.map(p => lbl(p[0])), datasets:[{ data:v, borderColor:css('--p'), backgroundColor:css('--p'), tension:.2 }] }, options:opts({ scales:{ y:{ beginAtZero:false } } }) }); };
+      $('exSel').onchange = ev => drawEx(+ev.target.value); drawEx(0);
+    } else { $('exSel').style.display = 'none'; $('exNote').textContent = 'Log weighted lifts to see progress here.'; $('cEx').style.display = 'none'; }
+  }
+}
+
 // =================== Settings (Coach + Memory tabs) ===================
 let S = null, logKind = 'meal', logShown = 15;
 const AUTH = () => {
@@ -413,6 +495,8 @@ const LOG_FIELDS = {
          ['description', 'What', 'text'], ['calories', 'kcal', 'number'], ['protein_g', 'Protein (g)', 'number'], ['carbs_g', 'Carbs (g)', 'number'], ['fat_g', 'Fat (g)', 'number']],
   workout: [['date', 'Date', 'date'], ['exercise', 'Exercise', 'text'], ['sets', 'Sets', 'number'], ['reps', 'Reps (e.g. 8,8,6)', 'text'], ['weight_kg', 'Weight (kg)', 'number'], ['duration_min', 'Minutes', 'number'], ['notes', 'Notes', 'text']],
   weight: [['date', 'Date', 'date'], ['weight_kg', 'Weight (kg)', 'number'], ['notes', 'Notes', 'text']],
+  sleep: [['date', 'Woke up on', 'date'], ['bedtime', 'Bedtime', 'time'], ['waketime', 'Wake time', 'time'], ['hours', 'Hours', 'number'], ['quality', 'Quality (1–5)', 'number'], ['notes', 'Notes', 'text']],
+  metric: [['date', 'Date', 'date'], ['value', 'Value', 'number'], ['notes', 'Notes', 'text']],
 };
 document.querySelectorAll('#logSeg button').forEach(b => b.onclick = () => { logKind = b.dataset.v; logShown = 15; segSet('logSeg', logKind); renderLogs(); });
 $('addAbout').onclick = () => openForm('Add a fact', [{ k: 'key', label: 'What', value: '', hint: 'e.g. injuries, equipment, favourite food' }, { k: 'value', label: 'Value', value: '' }],
@@ -423,9 +507,34 @@ $('clearChat').onclick = async () => { if (await confirmBox('Clear chat history?
 
 async function del(action, args, what, el) { if (await confirmBox('Delete ' + what + '?')) api(action, args, 'Deleted', { el: el && el.closest('.item') }); }
 
+const TRACK_ICON = { weight: '⚖️', calories: '🔥', protein: '🥩', training: '🏋️', sleep: '😴', waist: '📏', steps: '👟' };
+$('pQauto').onchange = () => api('set_prefs', { prefs: { quiet_auto: $('pQauto').checked ? 'on' : 'off' } },
+  'Quiet hours: ' + ($('pQauto').checked ? 'learned from sleep' : 'manual'), { el: $('pQauto').closest('.switch'), revert: () => { $('pQauto').checked = !$('pQauto').checked; } });
+
 function renderSettings() {
   if (!S) return;
   const P = S.prefs;
+  // tracking toggles
+  const GL = { cut: 'losing weight', bulk: 'building muscle', maintain: 'maintaining' }[S.goalType] || 'your goal';
+  $('trackHint').textContent = '★ = recommended for ' + GL + '. Your coach only asks about what is on.';
+  $('trackers').innerHTML = Object.keys(S.trackers).map(k =>
+    '<div class="item"><div class="grow"><div class="t">' + TRACK_ICON[k] + ' ' + esc(S.trackers[k]) + (S.trackingDefaults[k] ? ' <span style="color:var(--warn)">★</span>' : '') + '</div></div>' +
+    '<label class="switch"><input type="checkbox" data-tk="' + k + '"' + (S.tracking[k] ? ' checked' : '') + '><span></span></label></div>').join('');
+  document.querySelectorAll('[data-tk]').forEach(el => el.onchange = () => { const k = el.dataset.tk;
+    api('set_prefs', { prefs: { ['track_' + k]: el.checked ? 'on' : 'off' } }, S.trackers[k] + (el.checked ? ' tracking on' : ' tracking off'),
+      { el: el.closest('.item'), revert: () => { el.checked = !el.checked; } }); });
+  // quiet hours
+  $('pQauto').checked = P.quiet_auto !== 'off';
+  $('pQauto').disabled = !S.tracking.sleep;
+  const learned = S.quiet && S.quiet.source === 'sleep';
+  $('quietManual').style.display = learned ? 'none' : '';
+  $('quietInfo').textContent = learned ? '🌙 Learned from your sleep: ' + S.quiet.quiet_start + '–' + S.quiet.quiet_end + ' (30 min before your usual bedtime until you wake).'
+    : !S.tracking.sleep ? 'Turn on sleep tracking to learn this automatically.'
+    : P.quiet_auto !== 'off' ? 'Using these times until about 3 nights of sleep are logged.' : '';
+  // log tabs only for what is tracked
+  document.querySelector('#logSeg [data-v="weight"]').style.display = S.tracking.weight ? '' : 'none';
+  document.querySelector('#logSeg [data-v="sleep"]').style.display = S.tracking.sleep ? '' : 'none';
+  document.querySelector('#logSeg [data-v="metric"]').style.display = (S.tracking.waist || S.tracking.steps) ? '' : 'none';
   segSet('modeSeg', P.coach_mode); $('modeDesc').textContent = MODE_DESC[P.coach_mode] || '';
   segSet('lenSeg', P.reply_length);
   // don't overwrite fields the user is still editing
@@ -476,7 +585,9 @@ function renderLogs() {
   const rows = (S && S.logs[logKind]) || [];
   const line = { meal: r => [r.date.slice(8) + '/' + r.date.slice(5, 7) + ' ' + (r.time || ''), r.description, (+r.calories || 0) + ' kcal · P' + (+r.protein_g || 0)],
     workout: r => [r.date.slice(8) + '/' + r.date.slice(5, 7), r.exercise, (r.sets ? r.sets + '×' + r.reps : '') + (r.weight_kg !== '' && r.weight_kg != null ? ' @ ' + r.weight_kg + 'kg' : '') + (r.duration_min ? ' ' + r.duration_min + 'min' : '')],
-    weight: r => [r.date.slice(8) + '/' + r.date.slice(5, 7), r.notes || 'Weigh-in', r.weight_kg + ' kg'] }[logKind];
+    weight: r => [r.date.slice(8) + '/' + r.date.slice(5, 7), r.notes || 'Weigh-in', r.weight_kg + ' kg'],
+    sleep: r => [r.date.slice(8) + '/' + r.date.slice(5, 7) + ' · ' + (r.bedtime || '?') + '–' + (r.waketime || '?'), (r.hours || '?') + ' hours' + (r.quality ? ' · ' + '★'.repeat(+r.quality) : ''), r.notes || ''],
+    metric: r => [r.date.slice(8) + '/' + r.date.slice(5, 7), r.metric === 'waist_cm' ? 'Waist' : 'Steps', r.metric === 'waist_cm' ? r.value + ' cm' : (+r.value).toLocaleString() + ' steps'] }[logKind];
   $('logs').innerHTML = rows.length ? rows.slice(0, logShown).map((r, i) => { const [a, b, c] = line(r);
     return '<div class="item"><div class="grow"><div class="s">' + esc(a) + '</div><div class="t" style="font-weight:500">' + esc(b) + '</div><div class="s">' + esc(c) + '</div></div>' +
       '<button class="icon" data-le="' + i + '">✎</button><button class="icon" data-ld="' + i + '">🗑</button></div>'; }).join('') +
