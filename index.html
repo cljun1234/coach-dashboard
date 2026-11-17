@@ -88,8 +88,18 @@
   .datebar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:8px 0 6px; }
   .datebar .icon { width:40px; height:40px; font-size:22px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
   .datebar .icon:disabled { opacity:.3; }
-  .dlabel { position:relative; flex:1; text-align:center; font-weight:700; font-size:16px; padding:9px 0; background:var(--card);
-            border:1px solid var(--line); border-radius:12px; cursor:pointer; }
+  .dlabel { position:relative; flex:1; text-align:center; font-weight:700; font-size:16px; padding:9px 0; background:var(--card); color:var(--text);
+            border:1px solid var(--line); border-radius:12px; cursor:pointer; font-family:inherit; }
+  .calhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .calhead b { font-size:16px; }
+  .calgrid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; text-align:center; }
+  .calgrid .wd { font-size:11px; color:var(--muted); padding:4px 0; font-weight:600; }
+  .calgrid button { position:relative; border:0; background:transparent; color:var(--text); height:40px; border-radius:10px; font-size:14px; font-family:inherit; }
+  .calgrid button:disabled { color:var(--muted); opacity:.35; }
+  .calgrid button.today { box-shadow:inset 0 0 0 1.5px var(--accent); }
+  .calgrid button.sel { background:var(--accent); color:#fff; }
+  .calgrid button.has:after { content:''; position:absolute; left:50%; bottom:5px; width:5px; height:5px; margin-left:-2.5px; border-radius:50%; background:var(--good); }
+  .calgrid button.sel.has:after { background:#fff; }
   .dlabel .caret { color:var(--muted); font-size:12px; }
   .dlabel input { position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer; }
   #dayBody { transition:opacity .15s; }
@@ -111,7 +121,7 @@
   <section class="tab on" id="today">
     <div class="datebar">
       <button class="icon" id="dPrev" aria-label="Previous day">‹</button>
-      <label class="dlabel"><span id="dLabel">Today</span> <span class="caret">▾</span><input type="date" id="dPick"></label>
+      <button class="dlabel" id="dOpen"><span id="dLabel">Today</span> <span class="caret">▾</span></button>
       <button class="icon" id="dNext" aria-label="Next day">›</button>
     </div>
     <div style="text-align:center;margin:-2px 0 6px"><button class="chip" id="dToday" style="display:none">↩ Back to today</button></div>
@@ -177,6 +187,10 @@
 <div id="sheetBg"></div>
 <div class="sheet" id="sheet"><h3 id="sheetTitle"></h3><div id="sheetBody"></div>
   <div class="two" style="margin-top:16px"><button class="btn ghost" id="sheetCancel">Cancel</button><button class="btn" id="sheetSave">Save</button></div></div>
+<div class="sheet" id="cal"><div class="calhead"><button class="icon" id="calPrev">‹</button><b id="calTitle"></b><button class="icon" id="calNext">›</button></div>
+  <div class="calgrid" id="calGrid"></div>
+  <p class="hint" style="text-align:center;margin-top:10px">● = days with logs</p>
+  <div class="two" style="margin-top:10px"><button class="btn ghost" id="calClose">Close</button><button class="btn" id="calToday">Today</button></div></div>
 <div id="toast"></div>
 <div id="savebar"></div>
 <script>
@@ -307,8 +321,8 @@ $('checkinsCard').style.display = past ? 'none' : '';
   selDate = day.date;
   const today = DASH.today.date;
   $('dLabel').textContent = dayLabel(day.date);
-  $('dPick').max = today; $('dPick').value = day.date;
-  if (DASH.firstLogDate) $('dPick').min = DASH.firstLogDate;
+  const navBtn = document.querySelector('nav button[data-t="today"]');
+  navBtn.textContent = day.date === today ? 'Today' : new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
   $('dNext').disabled = day.date >= today;
   $('dToday').style.display = day.date === today ? 'none' : '';
 }
@@ -334,7 +348,39 @@ const goDay = (d) => { selDate = d; haptic('selection'); loadDay(d); };
 $('dPrev').onclick = () => goDay(isoAdd(selDate, -1));
 $('dNext').onclick = () => goDay(isoAdd(selDate, 1));
 $('dToday').onclick = () => goDay(DASH.today.date);
-$('dPick').onchange = e => { if (e.target.value) goDay(e.target.value); };
+// ---- custom calendar (the native date input doesn't open reliably inside Telegram)
+let calMonth = null;
+function openCal() {
+  calMonth = selDate.slice(0, 7);
+  drawCal();
+  $('sheetBg').style.display = 'block'; requestAnimationFrame(() => $('cal').classList.add('on'));
+  $('sheetBg').onclick = closeCal;
+}
+function closeCal() { $('cal').classList.remove('on'); setTimeout(() => { $('sheetBg').style.display = 'none'; $('sheetBg').onclick = closeForm; }, 200); }
+function drawCal() {
+  const today = DASH.today.date, min = isoAdd(today, -400), logged = new Set(DASH.loggedDates || []);
+  const y = +calMonth.slice(0, 4), m = +calMonth.slice(5, 7);
+  const first = new Date(Date.UTC(y, m - 1, 1)), days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const lead = (first.getUTCDay() + 6) % 7; // Monday first
+  $('calTitle').textContent = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  let html = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => '<div class="wd">' + d + '</div>').join('');
+  for (let i = 0; i < lead; i++) html += '<div></div>';
+  for (let d = 1; d <= days; d++) {
+    const iso = calMonth + '-' + String(d).padStart(2, '0');
+    const cls = [iso === today ? 'today' : '', iso === selDate ? 'sel' : '', logged.has(iso) ? 'has' : ''].join(' ');
+    html += '<button class="' + cls + '" data-d="' + iso + '"' + (iso > today || iso < min ? ' disabled' : '') + '>' + d + '</button>';
+  }
+  $('calGrid').innerHTML = html;
+  $('calGrid').querySelectorAll('button[data-d]').forEach(b => b.onclick = () => { closeCal(); goDay(b.dataset.d); });
+  $('calNext').disabled = calMonth >= today.slice(0, 7);
+  $('calPrev').disabled = calMonth <= min.slice(0, 7);
+}
+const shiftMonth = (n) => { const d = new Date(Date.UTC(+calMonth.slice(0, 4), +calMonth.slice(5, 7) - 1 + n, 1)); calMonth = d.toISOString().slice(0, 7); drawCal(); };
+$('dOpen').onclick = openCal;
+$('calPrev').onclick = () => shiftMonth(-1);
+$('calNext').onclick = () => shiftMonth(1);
+$('calClose').onclick = closeCal;
+$('calToday').onclick = () => { closeCal(); goDay(DASH.today.date); };
 // swipe left/right on the Today tab to change day
 (() => { let x0 = null, y0 = null;
   $('dayBody').addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
