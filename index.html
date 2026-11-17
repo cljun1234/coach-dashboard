@@ -85,6 +85,14 @@
   .spin { display:inline-block; width:12px; height:12px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%;
           animation:rot .7s linear infinite; vertical-align:-1px; margin-right:6px; }
   @keyframes rot { to { transform:rotate(360deg); } }
+  .datebar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:8px 0 6px; }
+  .datebar .icon { width:40px; height:40px; font-size:22px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+  .datebar .icon:disabled { opacity:.3; }
+  .dlabel { position:relative; flex:1; text-align:center; font-weight:700; font-size:16px; padding:9px 0; background:var(--card);
+            border:1px solid var(--line); border-radius:12px; cursor:pointer; }
+  .dlabel .caret { color:var(--muted); font-size:12px; }
+  .dlabel input { position:absolute; inset:0; opacity:0; width:100%; height:100%; cursor:pointer; }
+  #dayBody { transition:opacity .15s; }
   .badge { display:inline-block; padding:5px 9px; border-radius:8px; font-size:12.5px; font-weight:600; line-height:1.35; margin-top:8px; }
   .b-good { background:rgba(22,163,74,.15); color:var(--good); } .b-warn { background:rgba(245,158,11,.15); color:var(--warn); }
   .b-bad { background:rgba(239,68,68,.15); color:var(--bad); } .b-info { background:rgba(127,127,127,.12); color:var(--muted); }
@@ -101,6 +109,13 @@
 <nav><button class="on" data-t="today">Today</button><button data-t="progress">Progress</button><button data-t="coach">Coach</button><button data-t="memory">Memory</button></nav>
 <main>
   <section class="tab on" id="today">
+    <div class="datebar">
+      <button class="icon" id="dPrev" aria-label="Previous day">‹</button>
+      <label class="dlabel"><span id="dLabel">Today</span> <span class="caret">▾</span><input type="date" id="dPick"></label>
+      <button class="icon" id="dNext" aria-label="Next day">›</button>
+    </div>
+    <div style="text-align:center;margin:-2px 0 6px"><button class="chip" id="dToday" style="display:none">↩ Back to today</button></div>
+    <div id="dayBody">
     <div class="card"><h2>Calories</h2>
       <div class="big" id="kcal"></div><div class="bar"><div id="kcalbar"></div></div>
       <div class="sub" id="kcalnote" style="font-size:13px;color:var(--muted)"></div>
@@ -110,9 +125,10 @@
         <div class="macro"><b id="mf"></b><span>Fat</span></div>
       </div></div>
     <div class="card" id="todayBody" style="display:none"><h2>Sleep & activity</h2><div class="stats" id="todayBodyStats"></div></div>
-    <div class="card"><h2>Meals today</h2><div id="meals"></div></div>
-    <div class="card"><h2>Training today</h2><div id="workouts"></div></div>
-    <div class="card"><h2>Coach check-ins</h2><div id="checkins"></div></div>
+    <div class="card"><h2 id="hMeals">Meals today</h2><div id="meals"></div></div>
+    <div class="card"><h2 id="hTrain">Training today</h2><div id="workouts"></div></div>
+    <div class="card" id="checkinsCard"><h2>Coach check-ins</h2><div id="checkins"></div></div>
+    </div>
   </section>
   <section class="tab" id="progress"><div id="goalPill"></div><div id="pcards"></div></section>
   <section class="tab" id="coach">
@@ -181,8 +197,44 @@ function render(D) {
 $('hello').textContent = (D.name ? 'Hey ' + D.name : 'Your dashboard') + ' 💪';
 $('sub').textContent = D.now + (D.goal ? ' · Goal: ' + D.goal : '');
 
-// ---- today
-const T = D.today, tk = D.targets.kcal, tp = D.targets.protein;
+DASH = D;
+if (!selDate || selDate === D.today.date) { selDate = D.today.date; renderDay(D.today); }
+else loadDay(selDate, true);
+renderProgress(D);
+}
+
+async function load(quiet) {
+  const qs = new URLSearchParams(location.search);
+  const api = qs.get('api');
+  const status = $('status');
+  if (!quiet) { status.style.display = 'block'; status.textContent = 'Loading your dashboard…'; }
+  if (!api) { status.textContent = 'Missing api parameter. Open this from your Telegram bot.'; return; }
+  const auth = tg && tg.initData ? 'initData=' + encodeURIComponent(tg.initData)
+             : qs.get('key') ? 'key=' + encodeURIComponent(qs.get('key')) : '';
+  if (!auth) { status.textContent = 'Open this dashboard from your Telegram bot 📊'; return; }
+  try {
+    const res = await fetch(api + (api.includes('?') ? '&' : '?') + 'page=data&' + auth);
+    const j = await res.json();
+    if (!j.ok) throw new Error(j.error || 'Unknown error');
+    render(j.data);
+    status.style.display = 'none'; $('app').style.display = 'block';
+    if (!S) apiNow('get'); // preload Coach/Memory tabs in the background
+  } catch (err) {
+    status.innerHTML = '⚠️ Could not load: ' + esc(err.message) + '<br><button onclick="load()">Try again</button>';
+  }
+}
+// =================== Today tab: any date ===================
+let DASH = null, selDate = null;
+const dayCache = {};
+const isoAdd = (d, n) => { const t = new Date(d + 'T12:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+function dayLabel(d) {
+  const today = DASH.today.date;
+  if (d === today) return 'Today';
+  if (d === isoAdd(today, -1)) return 'Yesterday';
+  return new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+function renderDay(day) {
+const D = DASH, T = day, tk = D.targets.kcal, tp = D.targets.protein, past = !day.isToday;
 $('kcal').innerHTML = T.kcal + (tk ? ' <small>/ ' + tk + ' kcal</small>' : ' <small>kcal</small>');
 const kp = tk ? Math.min(100, T.kcal / tk * 100) : 0;
 $('kcalbar').style.width = kp + '%';
@@ -190,6 +242,13 @@ $('kcalbar').style.width = kp + '%';
 const kcalState = (() => {
   if (!tk) return { c: '--accent', t: 'Set a calorie target with your coach' };
   const r = T.kcal / tk, left = tk - T.kcal, over = T.kcal - tk;
+  if (!T.kcal && past) return { c: '--accent', t: 'Nothing logged this day' };
+  if (past) { // finished day: judge it
+    if (D.goalType === 'cut') return r > 1 ? { c: '--bad', t: '⚠️ Ended ' + over + ' kcal over' } : { c: '--good', t: '✅ Under target by ' + left + ' kcal' };
+    if (D.goalType === 'bulk') return r >= 0.95 && r <= 1.1 ? { c: '--good', t: '✅ Target hit' + (over > 0 ? ' (' + over + ' over)' : '') }
+      : r > 1.1 ? { c: r > 1.2 ? '--bad' : '--warn', t: over + ' kcal over target' } : { c: '--warn', t: 'Ended ' + left + ' kcal short' };
+    return Math.abs(over) <= tk * 0.1 ? { c: '--good', t: '✅ On target' } : { c: '--warn', t: (over > 0 ? over + ' kcal over' : left + ' kcal under') };
+  }
   if (D.goalType === 'cut') {
     if (r > 1) return { c: '--bad', t: '⚠️ ' + over + ' kcal over your limit' };
     if (r >= 0.9) return { c: '--warn', t: 'Close to your limit: ' + left + ' kcal left' };
@@ -214,11 +273,11 @@ $('pbar').style.background = tp && T.protein >= tp ? css('--good') : css('--acce
 $('mc').textContent = T.carbs + 'g'; $('mf').textContent = T.fat + 'g';
 $('meals').innerHTML = T.meals.length ? T.meals.map(m =>
   '<div class="row"><span class="l">' + esc(m.time) + '</span><span class="m">' + esc(m.desc) + '</span><span class="r">' + m.kcal + ' kcal · P' + m.p + '</span></div>').join('')
-  : '<div class="empty">Nothing logged yet. Send your coach a photo of your next meal 📸</div>';
+  : '<div class="empty">' + (past ? 'No meals logged this day.' : 'Nothing logged yet. Send your coach a photo of your next meal 📸') + '</div>';
 $('workouts').innerHTML = T.workouts.length ? T.workouts.map(w =>
   '<div class="row"><span class="m">' + esc(w.ex) + '</span><span class="r">' +
   (w.sets ? esc(w.sets) + '×' + esc(w.reps) : '') + (w.kg !== '' && w.kg != null ? ' @ ' + esc(w.kg) + 'kg' : '') + (w.min ? ' ' + esc(w.min) + 'min' : '') + '</span></div>').join('')
-  : '<div class="empty">No training logged today.</div>';
+  : '<div class="empty">' + (past ? 'No training logged this day.' : 'No training logged today.') + '</div>';
 $('checkins').innerHTML = D.checkins.length ? D.checkins.map(c =>
   '<div class="row"><span class="l">' + esc(c.at.slice(8, 10) + '/' + c.at.slice(5, 7) + ' ' + c.at.slice(11)) + '</span><span class="m">' + esc(c.reason) + '</span></div>').join('')
   : '<div class="empty">No check-ins scheduled.</div>';
@@ -230,39 +289,58 @@ $('kcalbar').parentNode.style.display = TR.calories === false ? 'none' : '';
 $('mp').parentNode.style.display = TR.protein === false ? 'none' : '';
 const tb = [];
 if (TR.sleep) {
-  const ln = D.sleep && D.sleep.lastNight;
-  tb.push('<div class="stat"><b>' + (ln ? ln[1] + 'h' + (ln[4] ? ' · ' + '★'.repeat(ln[4]) : '') : '–') + '</b><span>' + (ln ? 'last night (' + esc(ln[2] || '?') + '–' + esc(ln[3] || '?') + ')' : 'last night: tell your coach') + '</span></div>');
+  const ln = T.sleep;
+  tb.push('<div class="stat"><b>' + (ln ? ln[1] + 'h' + (ln[4] ? ' · ' + '★'.repeat(ln[4]) : '') : '–') + '</b><span>' + (ln ? (past ? 'sleep' : 'last night') + ' (' + esc(ln[2] || '?') + '–' + esc(ln[3] || '?') + ')' : past ? 'sleep not logged' : 'last night: tell your coach') + '</span></div>');
 }
 if (TR.steps) {
-  const st = (D.steps || []).filter(p => p[0] === D.days14[D.days14.length - 1]);
-  tb.push('<div class="stat"><b>' + (st.length ? st[0][1].toLocaleString() : '–') + '</b><span>steps today</span></div>');
+  tb.push('<div class="stat"><b>' + (T.steps != null ? T.steps.toLocaleString() : '–') + '</b><span>' + (past ? 'steps' : 'steps today') + '</span></div>');
 }
+if (TR.weight && T.weight) tb.push('<div class="stat"><b>' + T.weight + 'kg</b><span>weigh-in</span></div>');
 $('todayBody').style.display = tb.length ? '' : 'none';
 $('todayBodyStats').innerHTML = tb.join('');
 
-renderProgress(D);
+$('hMeals').textContent = past ? 'Meals' : 'Meals today';
+$('hTrain').textContent = past ? 'Training' : 'Training today';
+$('checkinsCard').style.display = past ? 'none' : '';
+  selDate = day.date;
+  const today = DASH.today.date;
+  $('dLabel').textContent = dayLabel(day.date);
+  $('dPick').max = today; $('dPick').value = day.date;
+  if (DASH.firstLogDate) $('dPick').min = DASH.firstLogDate;
+  $('dNext').disabled = day.date >= today;
+  $('dToday').style.display = day.date === today ? 'none' : '';
 }
-
-async function load(quiet) {
-  const qs = new URLSearchParams(location.search);
-  const api = qs.get('api');
-  const status = $('status');
-  if (!quiet) { status.style.display = 'block'; status.textContent = 'Loading your dashboard…'; }
-  if (!api) { status.textContent = 'Missing api parameter. Open this from your Telegram bot.'; return; }
-  const auth = tg && tg.initData ? 'initData=' + encodeURIComponent(tg.initData)
-             : qs.get('key') ? 'key=' + encodeURIComponent(qs.get('key')) : '';
-  if (!auth) { status.textContent = 'Open this dashboard from your Telegram bot 📊'; return; }
+async function loadDay(d, quiet) {
+  const today = DASH.today.date;
+  if (d > today) d = today;
+  if (d === today) { renderDay(DASH.today); return; }
+  if (dayCache[d]) { renderDay(dayCache[d]); return; }
+  $('dLabel').textContent = dayLabel(d);
+  $('dayBody').style.opacity = .45;
   try {
-    const res = await fetch(api + (api.includes('?') ? '&' : '?') + 'page=data&' + auth);
+    const qs = new URLSearchParams(location.search), api = qs.get('api');
+    const auth = tg && tg.initData ? 'initData=' + encodeURIComponent(tg.initData) : 'key=' + encodeURIComponent(qs.get('key') || '');
+    const res = await fetch(api + (api.includes('?') ? '&' : '?') + 'page=data&date=' + d + '&' + auth);
     const j = await res.json();
-    if (!j.ok) throw new Error(j.error || 'Unknown error');
-    render(j.data);
-    status.style.display = 'none'; $('app').style.display = 'block';
-    if (!S) apiNow('get'); // preload Coach/Memory tabs in the background
-  } catch (err) {
-    status.innerHTML = '⚠️ Could not load: ' + esc(err.message) + '<br><button onclick="load()">Try again</button>';
-  }
+    if (!j.ok) throw new Error(j.error || 'Failed');
+    dayCache[d] = j.day;
+    if (selDate === d || !quiet) renderDay(j.day);
+  } catch (err) { toast('⚠️ ' + err.message); $('dLabel').textContent = dayLabel(selDate); }
+  finally { $('dayBody').style.opacity = 1; }
 }
+const goDay = (d) => { selDate = d; haptic('selection'); loadDay(d); };
+$('dPrev').onclick = () => goDay(isoAdd(selDate, -1));
+$('dNext').onclick = () => goDay(isoAdd(selDate, 1));
+$('dToday').onclick = () => goDay(DASH.today.date);
+$('dPick').onchange = e => { if (e.target.value) goDay(e.target.value); };
+// swipe left/right on the Today tab to change day
+(() => { let x0 = null, y0 = null;
+  $('dayBody').addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
+  $('dayBody').addEventListener('touchend', e => { if (x0 == null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0; x0 = null;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) { if (dx > 0) $('dPrev').click(); else if (!$('dNext').disabled) $('dNext').click(); } }, { passive: true });
+})();
+
 // =================== Progress tab: adapts to goal + tracking ===================
 const GOAL_LABEL = { cut: 'Lose weight', bulk: 'Build muscle', maintain: 'Maintain' };
 const ORDER = {
@@ -414,7 +492,7 @@ async function apiNow(action, args, okMsg) {
     if (!j.ok) throw new Error(j.error || 'Failed');
     S = j.data; renderSettings();
     if (okMsg) { toast(okMsg); haptic(); }
-    if (action !== 'get') dashStale = true;
+    if (action !== 'get') { dashStale = true; Object.keys(dayCache).forEach(k => delete dayCache[k]); }
     return true;
   } catch (err) { toast('⚠️ ' + err.message); haptic('error'); return false; }
 }
@@ -607,7 +685,7 @@ document.querySelectorAll('nav button').forEach(b => b.addEventListener('click',
   if ((b.dataset.t === 'coach' || b.dataset.t === 'memory') && !S) { toast('Loading settings…'); api('get'); }
 }));
 
-$('refresh').onclick = () => { try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} load(); if (S) api('get'); };
+$('refresh').onclick = () => { Object.keys(dayCache).forEach(k => delete dayCache[k]); try { tg.HapticFeedback.impactOccurred('light'); } catch (e) {} load(); if (S) api('get'); };
 load();
 </script>
 </body></html>
