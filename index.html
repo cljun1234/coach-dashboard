@@ -155,6 +155,8 @@
         <div class="two" id="quietManual"><input type="time" id="pQs"><input type="time" id="pQe"></div><p class="hint" id="quietInfo"></p></div>
       <div class="field rowx"><div><b style="font-size:14px">Smart check-ins</b><p class="hint">Coach plans extra check-ins each morning around your plan (pre-workout, meal nudges).</p></div>
         <label class="switch"><input type="checkbox" id="pSmart"><span></span></label></div>
+      <div class="field rowx"><div><b style="font-size:14px">Save receipts</b><p class="hint">After the coach logs something, show a short line of exactly what was saved and today's total.</p></div>
+        <label class="switch"><input type="checkbox" id="pReceipts"><span></span></label></div>
       <div class="field rowx"><div><b style="font-size:14px">Inactivity check-ins</b><p class="hint">If you go quiet: a nudge after 1 day, Light mode after 3 days, paused after 7. Any message switches it back.</p></div>
         <label class="switch"><input type="checkbox" id="pInact"><span></span></label></div>
       <div class="field"><label>Daily targets</label><div class="two"><input type="number" id="pKcal" placeholder="kcal"><input type="number" id="pProt" placeholder="protein g"></div></div>
@@ -581,6 +583,8 @@ document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => {
 });
 document.querySelectorAll('#lenSeg button').forEach(b => b.onclick = () => { segSet('lenSeg', b.dataset.v); haptic('selection');
   api('set_prefs', { prefs: { reply_length: b.dataset.v } }, 'Replies: ' + b.textContent.trim()); });
+$('pReceipts').onchange = () => api('set_prefs', { prefs: { log_receipts: $('pReceipts').checked ? 'on' : 'off' } },
+  'Receipts ' + ($('pReceipts').checked ? 'on' : 'off'), { el: $('pReceipts').closest('.switch'), revert: () => { $('pReceipts').checked = !$('pReceipts').checked; } });
 $('pInact').onchange = () => api('set_prefs', { prefs: { inactivity_checkins: $('pInact').checked ? 'on' : 'off' } },
   'Inactivity check-ins ' + ($('pInact').checked ? 'on' : 'off'), { el: $('pInact').closest('.switch'), revert: () => { $('pInact').checked = !$('pInact').checked; } });
 $('pSmart').onchange = () => api('set_prefs', { prefs: { smart_checkins: $('pSmart').checked ? 'on' : 'off' } },
@@ -669,6 +673,7 @@ function renderSettings() {
     ? '🤖 Switched to ' + P.coach_mode + ' automatically: no messages for ' + IA.days + ' day' + (IA.days === 1 ? '' : 's') + '. Message your coach (or pick a mode) to switch back to ' + (IA.before || 'active') + '.'
     : (MODE_DESC[P.coach_mode] || '');
   $('pInact').checked = P.inactivity_checkins !== 'off';
+  $('pReceipts').checked = P.log_receipts !== 'off';
   segSet('lenSeg', P.reply_length);
   // don't overwrite fields the user is still editing
   const setIf = (id, v) => { const el = $(id); if (!el.dataset.dirty && document.activeElement !== el) el.value = v; };
